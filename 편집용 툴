@@ -1,0 +1,211 @@
+function onEdit(e) {
+  if (!e || !e.range) return;
+  
+  // [최적화] 동시 실행 과부하 방지 락 시작
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(1000); // 1초 동안 앞선 작업이 끝나길 대기
+  } catch (error) {
+    return; // 과부하 방지를 위해 현재 실행 취소
+  }
+  
+  const range = e.range;
+  const sheet = range.getSheet();
+  const sheetName = sheet.getName();
+  
+  // 🎯 대상 시트 목록 유지
+  const targetSheets = [
+    "다군", "바사", "갤걸", "드엠", "울소", 
+    "닼히", "갓즈", "아워즈", "픽시즈", "루가족", "걸몬", "바스/인축", "블루아이즈", "레전드레어"
+  ];
+  
+  if (!targetSheets.includes(sheetName)) {
+    if (lock.hasLock()) lock.releaseLock(); 
+    return;
+  }
+  
+  // 내용 변화가 없는 단순 엔터는 실행 취소
+  if (e.value !== undefined && e.value === e.oldValue) {
+    if (lock.hasLock()) lock.releaseLock(); 
+    return;
+  }
+  
+  // ⚙️ [열/행 설정 정의]
+  const charColumn = 2; // B열: 캐릭터명
+  const linkColumn = 3; // C열: 링크
+  const specColumn = 4; // D열: 육성도 (드롭다운)
+  const dateColumn = 5; // E열: 날짜
+  const authorColumn = 6; // F열: 작성자
+  const startRow = 5;    // 데이터 시작 행 (5행)
+
+  const editedColumn = range.getColumn();
+  const editedLastColumn = range.getLastColumn();
+  const editedRow = range.getRow();
+  const editedLastRow = range.getLastRow();
+  
+  // 🔒 [감시 범위] B열(2)부터 F열(6)까지 중 하나라도 걸치면 통과
+  if (editedLastColumn < charColumn || editedColumn > authorColumn || editedLastRow < startRow) {
+    if (lock.hasLock()) lock.releaseLock();
+    return;
+  }
+  
+  const sheetLastRow = sheet.getLastRow();
+  let maxRowToProcess = Math.max(sheetLastRow, editedLastRow);
+  if (maxRowToProcess < startRow) maxRowToProcess = startRow; 
+  
+  const totalRowsCount = maxRowToProcess - startRow + 1;
+  
+  // =========================================================================
+  // 🔥 [작업 1] 기존 블록 단위 점선 테두리 설정 로직 (기존 로직 100% 유지)
+  // =========================================================================
+  const bValues = sheet.getRange(startRow, charColumn, totalRowsCount, 1).getValues();
+  
+  let currentStatus = null;
+  let startIdx = 0;
+  
+  for (let i = 0; i < bValues.length; i++) {
+    const hasData = (bValues[i][0] !== "");
+    
+    if (currentStatus === null) {
+      currentStatus = hasData;
+      startIdx = i;
+    } else if (hasData !== currentStatus) {
+      const rowCount = i - startIdx;
+      const blockRange = sheet.getRange(startRow + startIdx, charColumn, rowCount, 6);
+      
+      if (currentStatus) {
+        blockRange.setBorder(true, null, null, null, null, true, "#000000", SpreadsheetApp.BorderStyle.DOTTED);
+      } else {
+        blockRange.setBorder(false, null, null, null, null, false, null, null);
+      }
+      
+      currentStatus = hasData;
+      startIdx = i;
+    }
+  }
+  
+  if (currentStatus !== null) {
+    const rowCount = bValues.length - startIdx;
+    const blockRange = sheet.getRange(startRow + startIdx, charColumn, rowCount, 6);
+    
+    if (currentStatus) {
+      blockRange.setBorder(true, null, null, null, null, true, "#000000", SpreadsheetApp.BorderStyle.DOTTED);
+    } else {
+      blockRange.setBorder(false, null, null, null, null, false, null, null);
+    }
+  }
+
+  // =========================================================================
+  // 🔥 [작업 2] 캐릭터별 내부 정렬 및 날짜 포맷 원천 고정 로직 (새로 빌드)
+  // =========================================================================
+  const fullRange = sheet.getRange(startRow, charColumn, totalRowsCount, 5);
+  const fullValues = fullRange.getDisplayValues(); // 화면에 보이는 텍스트 그대로 가져옴
+  
+  // C열(링크)만 실제 값(하이퍼링크 객체/URL)을 따로 백업
+  const linkActualValues = sheet.getRange(startRow, linkColumn, totalRowsCount, 1).getValues();
+  
+  const specPriority = {
+    '4진': 1,
+    '초본': 1, // 동률 1순위
+    '본능': 2,
+    '3진': 3,
+    '2진': 4
+  };
+
+  let blocks = [];
+  let currentBlock = null;
+
+  // 1) 데이터 블록 쪼개기
+  for (let i = 0; i < fullValues.length; i++) {
+    const charName = fullValues[i][0].toString().trim();
+    const linkVal = linkActualValues[i][0];
+    const specVal = fullValues[i][2].toString().trim();
+    const dateVal = fullValues[i][3].toString().trim();
+    const authorVal = fullValues[i][4].toString().trim();
+
+    if (charName !== "") {
+      if (currentBlock) blocks.push(currentBlock);
+      currentBlock = { name: charName, rows: [] };
+    }
+
+    if (currentBlock) {
+      currentBlock.rows.push({ link: linkVal, spec: specVal, date: dateVal, author: authorVal });
+    }
+  }
+  if (currentBlock) blocks.push(currentBlock);
+
+  // 2) 블록 내부 정렬 수행 및 결과 배열 생성
+  let resultValues = [];
+
+  blocks.forEach(block => {
+    let validRows = block.rows.filter(r => r.link !== "" || r.spec !== "" || r.date !== "" || r.author !== "");
+    
+    // 순서 정렬 로직 (기존 국룰 유지)
+    validRows.sort((a, b) => {
+      const pA = specPriority[a.spec] !== undefined ? specPriority[a.spec] : 999;
+      const pB = specPriority[b.spec] !== undefined ? specPriority[b.spec] : 999;
+      
+      if (pA !== pB) return pA - pB;
+      
+      const dateA = parseDateInternal(a.date);
+      const dateB = parseDateInternal(b.date);
+      return dateA - dateB;
+    });
+    
+    let blockLength = block.rows.length;
+    for (let i = 0; i < blockLength; i++) {
+      let charCellVal = (i === 0) ? block.name : "";
+      let cellLink = "";
+      let cellSpec = "";
+      let cellDate = "";
+      let cellAuthor = "";
+
+      if (i < validRows.length) {
+        cellLink = validRows[i].link;
+        cellSpec = validRows[i].spec;
+        // 🛠️ 어떤 형식이든 텍스트 가공 단에서 "YYYY. MM. DD" 문자열 구조로 강제 고정
+        cellDate = normalizeDateString(validRows[i].date); 
+        cellAuthor = validRows[i].author;
+      }
+      
+      resultValues.push([charCellVal, cellLink, cellSpec, cellDate, cellAuthor]);
+    }
+  });
+
+  // 3) [핵심 안전장치] 값을 시트에 최종 쓰기 전에 날짜 열(E열) 전체를 서식 없는 '일반 텍스트'("@")로 선제 잠금
+  // 구글 시트가 대입되는 텍스트를 인식하여 자릿수를 강제 변환하는 행위를 원천 차단합니다.
+  const dateRange = sheet.getRange(startRow, dateColumn, totalRowsCount, 1);
+  dateRange.setNumberFormat("@"); 
+
+  // 데이터 최종 반영 (B열~F열)
+  fullRange.setValues(resultValues);
+
+  // [완료] 락 해제
+  if (lock.hasLock()) lock.releaseLock();
+}
+
+// 🛠️ 날짜 문자열을 무조건 2자리 포맷의 "YYYY. MM. DD" 형태로 재조립하는 안전 함수
+function normalizeDateString(dateStr) {
+  if (!dateStr) return "";
+  const matches = dateStr.match(/\d+/g);
+  if (matches && matches.length >= 3) {
+    const year = matches[0];
+    const month = matches[1].length === 1 ? "0" + matches[1] : matches[1];
+    const day = matches[2].length === 1 ? "0" + matches[2] : matches[2];
+    return year + ". " + month + ". " + day;
+  }
+  return dateStr;
+}
+
+// 🛠️ 정렬을 위해 날짜의 선후 관계를 판단하는 파싱 함수
+function parseDateInternal(dateStr) {
+  if (!dateStr) return Infinity;
+  const matches = dateStr.match(/\d+/g);
+  if (matches && matches.length >= 3) {
+    const year = parseInt(matches[0], 10);
+    const month = parseInt(matches[1], 10) - 1;
+    const day = parseInt(matches[2], 10);
+    return new Date(year, month, day).getTime();
+  }
+  return Infinity;
+}
