@@ -1,0 +1,77 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import time
+import re
+
+def extract_images(url):
+
+    total_start = time.time()
+
+    # Chrome
+    options = Options()
+    options.binary_location = "/root/chrome-linux64/chrome"
+
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    chrome_start = time.time()
+    driver = webdriver.Chrome(options=options)
+    print(f"[시간] Chrome 실행 : {time.time() - chrome_start:.2f}", flush=True)
+
+    page_start = time.time()
+    driver.get(url)
+
+    time.sleep(5)
+    print(f"[시간] 페이지 로딩 : {time.time() - page_start:.2f}", flush=True)
+
+    html_start = time.time()
+    html = driver.page_source
+    print(f"[시간] HTML 읽기 : {time.time() - html_start:.2f}", flush=True)
+
+    quit_start = time.time()
+    driver.quit()
+    print(f"[시간] Chrome 종료 : {time.time() - quit_start:.2f}", flush=True)
+
+    body_part = html
+
+    body_start = html.find('class="writing_view_box"')
+    if body_start == -1:
+        body_start = html.find('class="writeview_contents"')
+    if body_start == -1:
+        body_start = html.find('class="thum-txt"')
+
+    if body_start != -1:
+        body_end = html.find('class="comment_wrap"', body_start)
+        if body_end == -1:
+            body_end = html.find('class="view_comment"', body_start)
+
+        if body_end != -1:
+            body_part = html[body_start:body_end]
+
+        else:
+            body_part = html[body_start:]
+
+    regex_start = time.time()
+
+    img_regex = re.compile(
+        r'<img[^>]*(?:src|data-src|data-original)=["\']([^"\']*viewimage\.php[^"\']*)["\'][^>]*',
+        re.IGNORECASE
+    )
+
+    matches = img_regex.findall(body_part)
+
+    images = []
+
+    if matches:
+        for src in matches:
+            if src.startswith("/"):
+                src = "https://www.dcinside.com" + src
+
+            src = src.replace("&amp;", "&")
+
+            images.append(f'<img src="{src}">')
+    print(f"[시간] 정규식 : {time.time() - regex_start:.2f}", flush=True)
+    print(f"[시간] 전체 : {time.time() - total_start:.2f}", flush=True)
+
+    return images
