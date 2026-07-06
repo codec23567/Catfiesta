@@ -1,0 +1,173 @@
+/*
+체크박스(F3, J3)를 누를 때 실행될 메인 트리거 함수입니다.
+ */
+
+function triggerByCheckbox(e) {
+  if (!e) return;
+  var sheet = e.source.getActiveSheet();
+  var range = e.range;
+  var cellAddress = range.getA1Notation();
+  
+  // 1. F3 셀이 체크(TRUE) 되었을 때 작동 (날짜/작성자 추출 및 세탁기 가동)
+  if (cellAddress === 'F3' && range.getValue() === true) {
+    fillEmptyCellsOnly(sheet);
+    // 작업이 끝나면 다음 재시도를 위해 체크박스를 알아서 풀어줍니다.
+    sheet.getRange('F3').setValue(false);
+  }
+
+  // 2. J3 셀이 체크(TRUE) 되었을 때 작동 (이미지 HTML 추출)
+  if (cellAddress === 'J3' && range.getValue() === true) {
+    runImageExtractor(sheet);
+    sheet.getRange('J3').setValue(false);
+  }
+}
+
+/*
+ 데이터가 있는 행까지만
+ */
+
+function fillEmptyCellsOnly(sheet) {
+  var startRow = 5; 
+  var lastRow = sheet.getLastRow(); // 실제 작성된 마지막 행을 자동 감지
+  if (lastRow < startRow) return;   
+  
+  var numRows = lastRow - startRow + 1;
+  
+  var urls = sheet.getRange(startRow, 3, numRows, 1).getValues(); // C열: URL
+  var dateRange = sheet.getRange(startRow, 5, numRows, 1);        // E열: 날짜
+  var authorRange = sheet.getRange(startRow, 6, numRows, 1);      // F열: 작성자
+  
+  var dates = dateRange.getValues();
+  var authors = authorRange.getValues();
+  
+  var requests = [];
+  var targetIndices = []; 
+  
+  for (var i = 0; i < urls.length; i++) {
+    var url = urls[i][0];
+    var existingDate = dates[i][0];
+    var existingAuthor = authors[i][0];
+    
+    // URL 칸이 비어있으면 기존 날짜와 작성자 기록을 지옵니다.
+    if (!url || url.toString().trim() === "") {
+      dates[i][0] = "";
+      authors[i][0] = "";
+      continue;
+    }
+    
+    // [크롤링 규칙] URL이 있고 날짜나 작성자가 비어있거나, 이전 실패 문자(retry)가 있으면 재수집 대상으로 등록
+    if (url.toString().indexOf("dcinside") !== -1) {
+      var isClear = !existingDate || !existingAuthor || existingDate.toString().trim() === "";
+      var isRetry = existingDate.toString().trim() === "retry";
+      
+      if (isClear || isRetry) {
+        requests.push({
+          'url': url.toString().trim(),
+          'muteHttpExceptions': true,
+          'headers': { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        });
+        targetIndices.push(i);
+      }
+    }
+  }
+  
+  if (requests.length === 0) {
+    dateRange.setValues(dates);
+    authorRange.setValues(authors);
+    return;
+  }
+  
+  // 동시 접속 및 3회 재시도 로직
+  var MAX_RETRIES = 3;
+  var currentTry = 0;
+  var pendingRequests = requests.slice();
+  var pendingIndices = targetIndices.slice();
+  
+  while (pendingRequests.length > 0 && currentTry < MAX_RETRIES) {
+    if (currentTry > 0) Utilities.sleep(1000); // 다음 라운드 전 1초 대기
+    
+    var responses = UrlFetchApp.fetchAll(pendingRequests);
+    var nextPendingRequests = [];
+    var nextPendingIndices = [];
+    
+    for (var j = 0; j < responses.length; j++) {
+      var idx = pendingIndices[j];
+      var responseCode = responses[j].getResponseCode();
+      var html = responses[j].getContentText();
+      var success = false;
+      
+      if (responseCode === 200 && html.indexOf("gall_date") !== -1) {
+        try {
+          var authorMatch = html.match(/data-nick="([^"]+)"(?:\s+data-uid="([^"]*)")?(?:\s+data-ip="([^"]*)")?/);
+          var finalAuthor = "";
+          if (authorMatch) {
+            var nick = decodeHtmlEntities(authorMatch[1]);
+            var id = (authorMatch[2] && authorMatch[2] !== "") ? authorMatch[2] : (authorMatch[3] || "");
+            finalAuthor = nick + (id !== "" ? "(" + id + ")" : "");
+          }
+          
+          var dateMatch = html.match(/<span class="gall_date" title="([^"]+)">/) || html.match(/<span class="date">([^<]+)<\/span>/);
+          var finalDate = "";
+          if (dateMatch) {
+            var rawDate = dateMatch[1].trim().split(' ')[0]; 
+            finalDate = rawDate.replace(/-/g, '. ').replace(/\.([^ ])/g, '. $1'); 
+          }
+          
+          if (finalDate !== "" && finalAuthor !== "") {
+            dates[idx][0] = finalDate;
+            authors[idx][0] = finalAuthor;
+            success = true;
+          }
+        } catch (e) {} 
+      }
+      
+      // 수집에 실패한 경우
+      if (!success) {
+        // 404 에러거나 화면에 삭제 멘트가 있다면 진짜 터진 글이므로 재시도 없이 '즉시 확정' 후 패스
+        if (responseCode === 404 || html.indexOf("삭제") !== -1 || html.indexOf("존재하지 않는") !== -1) {
+          dates[idx][0] = "삭제됨";
+          authors[idx][0] = ""; // [수정] 작성자 셀은 깔끔하게 빈칸 처리
+        } else {
+          // 단순히 디시가 일시적으로 튕겨낸 것이라면 다음 재시도 명단(nextPending)에 등록
+          nextPendingRequests.push(pendingRequests[j]);
+          nextPendingIndices.push(idx);
+        }
+      }
+    }
+    
+    // 다음 라운드로 명단 교체
+    pendingRequests = nextPendingRequests;
+    pendingIndices = nextPendingIndices;
+    currentTry++;
+  }
+  
+  // 3번을 다 튕겨서 실패한 항목들만 최종적으로 처리
+  for (var k = 0; k < pendingIndices.length; k++) {
+    var failedIdx = pendingIndices[k];
+    dates[failedIdx][0] = "retry";
+    authors[failedIdx][0] = ""; //작성자 셀은 빈칸 처리
+  }
+  
+  // 최종 결과 반영
+  dateRange.setValues(dates);
+  authorRange.setValues(authors);
+}
+
+/*
+ HTML 특수문자 코드를 원래 문자로 변환합니다.
+ */
+
+function decodeHtmlEntities(text) {
+  if (!text) return "";
+  try {
+    var xmlStr = "<root>" + text + "</root>";
+    var doc = XmlService.parse(xmlStr);
+    return doc.getRootElement().getText();
+  } catch (e) {
+    return text.replace(/&#039;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  }
+}
+
+
+
+
