@@ -1,0 +1,126 @@
+/*
+[이미지 HTML 추출 및 자동 매칭 엔진 - 멀티 링크 지원]
+ */
+function runImageExtractor(sheet) {
+  // K3부터 가로로 10칸(K열~T열)의 링크 영역을 한 번에 읽어옵니다.
+  var row3Values = sheet.getRange(3, 11, 1, 10).getValues()[0]; 
+  var imgList = [];
+  
+  // 가로로 적힌 링크들을 순서대로 돌면서 이미지를 하나의 바구니에 모읍니다.
+  for (var u = 0; u < row3Values.length; u++) {
+    var url = row3Values[u].toString().trim();
+    if (url && url.indexOf("dcinside") !== -1) {
+      var subList = DC_IMAGES_HTML_INTERNAL(url);
+      
+      // 정상적으로 <img> 태그를 들고 온 경우에만 바구니에 차곡차곡 합칩니다.
+      if (subList.length > 0 && subList[0].indexOf("<img") !== -1) {
+        imgList = imgList.concat(subList);
+      }
+    }
+  }
+  
+  // 만약 모든 링크를 다 뒤졌는데도 이미지가 단 하나도 없다면 예외 처리
+  if (imgList.length === 0) {
+    imgList = ["본문 이미지 없음"];
+  }
+  
+  var imgCnt = imgList.length;
+  
+  var startRow = 5;
+  var lastRow = sheet.getLastRow();
+  if (lastRow < startRow) lastRow = startRow;
+  var numRows = lastRow - startRow + 1;
+  
+  var bValues = sheet.getRange(startRow, 2, numRows, 1).getValues();  // B열
+  var kValues = sheet.getRange(startRow, 11, numRows, 1).getValues(); // K열
+  
+  // 결과 HTML이 출력될 열 번호 (10 = J열)
+  var targetColumn = 10; 
+  var outputValues = sheet.getRange(startRow, targetColumn, numRows, 1).getValues();
+  
+  //  기존에 완벽하게 작동하던 내부 매칭 로직 그대로입니다.
+  var validBCount = 0;
+  
+  for (var i = 0; i < numRows; i++) {
+    var bCell = bValues[i][0];
+    var kCell = kValues[i][0];
+    
+    if (bCell && bCell.toString().trim() !== "") {
+      validBCount++;
+      
+      if (kCell && kCell.toString().trim() !== "" && validBCount <= imgCnt) {
+        outputValues[i][0] = imgList[validBCount - 1]; 
+      } else if (kCell && kCell.toString().trim() !== "") {
+        outputValues[i][0] = "";
+      }
+    } else {
+      if (kCell && kCell.toString().trim() !== "") {
+        outputValues[i][0] = "";
+      }
+    }
+  }
+  
+  sheet.getRange(startRow, targetColumn, numRows, 1).setValues(outputValues);
+}
+
+/*
+ 디시 본문 이미지 태그 파싱 내부 엔진 
+ */
+function DC_IMAGES_HTML_INTERNAL(url) {
+  if (!url || url.toString().trim() === "") return [];
+
+  try {
+    var options = {
+      'muteHttpExceptions': true,
+      'headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': url 
+      }
+    };
+    
+    var response = UrlFetchApp.fetch(url, options);
+    var html = response.getContentText();
+    
+    var bodyPart = html;
+    var bodyStart = html.indexOf('class="writing_view_box"');
+    if (bodyStart === -1) bodyStart = html.indexOf('class="writeview_contents"');
+    if (bodyStart === -1) bodyStart = html.indexOf('class="thum-txt"'); 
+
+    if (bodyStart !== -1) {
+      var bodyEnd = html.indexOf('class="comment_wrap"', bodyStart);
+      if (bodyEnd === -1) bodyEnd = html.indexOf('class="view_comment"', bodyStart);
+      
+      if (bodyEnd !== -1) {
+        bodyPart = html.substring(bodyStart, bodyEnd);
+      } else {
+        bodyPart = html.substring(bodyStart);
+      }
+    }
+
+    var imgRegex = /<img[^>]* (?:src|data-src|data-original)=["']([^"']*viewimage\.php[^"']*)["'][^>]*>/gi;
+    var match;
+    var htmlTags = [];
+
+    while ((match = imgRegex.exec(bodyPart)) !== null) {
+      var imgUrl = match[1];
+      if (imgUrl.startsWith('/')) {
+        imgUrl = "https://www.dcinside.com" + imgUrl;
+      }
+      var cleanUrl = imgUrl.replace(/&amp;/g, "&");
+      htmlTags.push('<img src="' + cleanUrl + '">');
+    }
+
+    if (htmlTags.length > 0) {
+      return htmlTags;
+    } else {
+      return ["본문 이미지 없음"];
+    }
+    
+  } catch (e) {
+    return ["연결 실패: " + e.toString()];
+  }
+}
+
+
+
+
