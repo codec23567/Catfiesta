@@ -1,0 +1,64 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import time
+import re
+
+
+def extract_nickdate(url):
+
+    options = Options()
+    options.binary_location = "/root/chrome-linux64/chrome"
+
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(options=options)
+
+    driver.get(url)
+
+    time.sleep(5)
+
+    html = driver.page_source
+
+    driver.quit()
+
+    deleted = False
+
+    date = ""
+    author = ""
+
+    author_match = re.search(
+        r'data-nick="([^"]+)"(?:\s+data-uid="([^"]*)")?(?:\s+data-ip="([^"]*)")?',
+        html
+    )
+
+    if author_match:
+        nick = author_match.group(1)
+
+        uid = (
+            author_match.group(2)
+            if author_match.group(2)
+            else (author_match.group(3) or "")
+        )
+
+        if uid != "":
+            author = f"{nick}({uid})"
+        else:
+            author = nick
+
+    date_match = (
+        re.search(r'<span class="gall_date" title="([^"]+)">', html)
+        or re.search(r'<span class="date">([^<]+)</span>', html)
+    )
+
+    if date_match:
+        raw_date = date_match.group(1).strip().split(" ")[0]
+        date = re.sub(r"\.([^ ])", r". \1", raw_date.replace("-", ". "))
+
+
+    return {
+        "date": date,
+        "author": author,
+        "deleted": deleted
+    }
