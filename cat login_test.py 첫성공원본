@@ -1,0 +1,164 @@
+(venv) root@crawler:/opt/crawler# cat login_test.py
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+import getpass
+import time
+
+
+LOGIN_URL = (
+    "https://sign.dcinside.com/login"
+    "?s_url=https://www.dcinside.com/"
+)
+
+
+# ==================================================
+# 1. 터미널에서 로그인 정보 입력
+# ==================================================
+
+user_id = input("아이디 입력: ")
+user_pw = getpass.getpass("비밀번호 입력: ")
+
+
+# ==================================================
+# 2. Chrome 설정
+# ==================================================
+
+options = Options()
+
+options.binary_location = "/usr/bin/google-chrome"
+
+options.add_argument("--headless=new")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--window-size=1920,1080")
+
+# 로그인 페이지가 정상적으로 표시되도록
+# 일반 데스크톱 Chrome User-Agent 사용
+options.add_argument(
+    "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/150.0.0.0 Safari/537.36"
+)
+
+
+driver = webdriver.Chrome(
+    options=options
+)
+
+
+try:
+
+    # ==================================================
+    # 3. 로그인 페이지 접속
+    # ==================================================
+
+    print()
+    print("[1] Chrome 실행 성공")
+
+    driver.get(LOGIN_URL)
+
+    print("[2] 로그인 페이지 접속")
+
+    time.sleep(3)
+
+
+    # ==================================================
+    # 4. 아이디 입력
+    # ==================================================
+
+    id_input = driver.find_element(
+        By.NAME,
+        "user_id"
+    )
+
+    id_input.clear()
+    id_input.send_keys(user_id)
+
+    print("[3] 아이디 입력 완료")
+
+
+    # ==================================================
+    # 5. 비밀번호 입력
+    # ==================================================
+
+    pw_input = driver.find_element(
+        By.NAME,
+        "pw"
+    )
+
+    pw_input.clear()
+    pw_input.send_keys(user_pw)
+
+    print("[4] 비밀번호 입력 완료")
+
+
+    # ==================================================
+    # 6. 로그인 버튼 클릭
+    # ==================================================
+
+    login_button = driver.find_element(
+        By.CSS_SELECTOR,
+        "button[type='submit']"
+    )
+
+    print("[5] 로그인 버튼 발견")
+
+    login_button.click()
+
+    print("[6] 로그인 버튼 클릭 완료")
+
+
+    # 로그인 처리 대기
+    time.sleep(7)
+
+
+    # ==================================================
+    # 7. 결과 확인
+    # ==================================================
+
+    print()
+    print("===== 로그인 결과 =====")
+
+    print(
+        "현재 주소:",
+        driver.current_url
+    )
+
+    print(
+        "페이지 제목:",
+        driver.title
+    )
+
+
+    body_text = driver.find_element(
+        By.TAG_NAME,
+        "body"
+    ).text
+
+    print()
+    print("===== 화면 텍스트 앞부분 =====")
+    print(body_text[:1500])
+
+
+    # ==================================================
+    # 8. 결과 화면 저장
+    # ==================================================
+
+    driver.save_screenshot(
+        "login_result.png"
+    )
+
+    print()
+    print(
+        "스크린샷 저장 완료: "
+        "login_result.png"
+    )
+
+
+finally:
+
+    driver.quit()
+
+    print("Chrome 종료")
+(venv) root@crawler:/opt/crawler#
