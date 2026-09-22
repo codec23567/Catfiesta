@@ -1,0 +1,4 @@
+# First commit: 2026-07-20
+# Last commit: 2026-07-21
+requests
+selenium

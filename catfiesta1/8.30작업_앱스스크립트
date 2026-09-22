@@ -1,0 +1,792 @@
+// First commit: 2026-08-30
+// Last commit: 2026-08-30
+/*
+체크박스(F3, H3, I3, J3, M3)를 누를 때 실행될 메인 트리거 함수입니다.
+※ M3은 이번 구조 개편과 무관한 별도 특수 시트에서 사용하는 트리거이므로 그대로 유지.
+*/
+function triggerByCheckbox(e) {
+  if (!e) return;
+
+  var sheet = e.source.getActiveSheet();
+  var range = e.range;
+  var cellAddress = range.getA1Notation();
+
+  // F3: 닉네임/날짜 추출 (GitHub Actions)
+  if (cellAddress === 'F3' && range.getValue() === true) {
+    triggerCrawler(sheet.getName());
+    sheet.getRange('F3').setValue(false);
+  }
+
+  // H3: 모음집관리 (캐릭터별 모음집 게시글 검증 + 수정)
+  if (cellAddress === 'H3' && range.getValue() === true) {
+    runModify_normal_bl(sheet.getName());
+    sheet.getRange('H3').setValue(false);
+  }
+
+  // I3: 시리즈관리 (시리즈 모음집 게시글 수정, C3 URL + I5 완성본 HTML)
+  if (cellAddress === 'I3' && range.getValue() === true) {
+    runModify_html(sheet.getName());
+    sheet.getRange('I3').setValue(false);
+  }
+
+  // J3: 이미지 추출
+  if (cellAddress === 'J3' && range.getValue() === true) {
+    runImageExtractor(sheet.getName());
+    sheet.getRange('J3').setValue(false);
+  }
+
+  // M3: 별도 특수 시트용 - 일반 에디터 게시글 수정 (이번 개편과 무관, 그대로 유지)
+  if (cellAddress === 'M3' && range.getValue() === true) {
+    runModify_normal(sheet.getName());
+    sheet.getRange('M3').setValue(false);
+  }
+
+}
+
+__________________________________________________________________________________
+function triggerCrawler(sheetName) {
+  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_PAT");
+
+  const url =
+    "https://api.github.com/repos/codec23567/catfiestagitsheet235/actions/workflows/nickdate.yml/dispatches";
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json"
+    },
+    payload: JSON.stringify({
+      ref: "main",
+      inputs: {
+        sheet_name: sheetName
+      }
+    }),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+
+  Logger.log(response.getResponseCode());
+  Logger.log(response.getContentText());
+}
+__________________________________________________________________________________
+function runImageExtractor(sheetName) {
+  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_PAT");
+
+  const url =
+    "https://api.github.com/repos/codec23567/catfiestagitsheet235/actions/workflows/image.yml/dispatches";
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json"
+    },
+
+    payload: JSON.stringify({
+      ref: "main",
+      inputs: {
+        sheet_name: sheetName
+      }
+    }),
+
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+
+  Logger.log(response.getResponseCode());
+  Logger.log(response.getContentText());
+}
+__________________________________________________________________________________
+function runModify_html(sheetName) {
+  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_PAT");
+
+  const url =
+    "https://api.github.com/repos/codec23567/catfiestagitsheet235/actions/workflows/m_html.yml/dispatches";
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json"
+    },
+
+    payload: JSON.stringify({
+      ref: "main",
+      inputs: {
+        sheet_name: sheetName
+      }
+    }),
+
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+
+  Logger.log(response.getResponseCode());
+  Logger.log(response.getContentText());
+}
+__________________________________________________________________________________
+function runModify_normal(sheetName) {
+
+  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_PAT");
+
+  const url =
+    "https://api.github.com/repos/codec23567/catfiestagitsheet235/actions/workflows/m_normal.yml/dispatches";
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json"
+    },
+
+    payload: JSON.stringify({
+      ref: "main",
+      inputs: {
+        sheet_name: sheetName
+      }
+    }),
+
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+
+  Logger.log(response.getResponseCode());
+  Logger.log(response.getContentText());
+}
+__________________________________________________________________________________
+function runModify_normal_bl(sheetName) {
+  // H3 "모음집관리" 트리거
+  //
+  // 구조: H{그룹시작행}=모음집 링크 / H{그룹시작행+1}=게시할 내용 / H{그룹시작행+2}=완료 날짜
+  //
+  // GitHub Actions에 신호를 보내기 전, 완료 날짜(H+2)가 비어있는 그룹만
+  // 게시할 내용(H+1)을 새로 구성해서 덮어쓴다 (기존 내용이 있어도 무조건 갱신).
+  // 완료 날짜가 이미 있는 그룹은 건드리지 않는다.
+  //
+  // [최적화] 셀 단위로 읽고/쓰지 않고, B~H열 전체를 한 번에 읽어서(getValues)
+  // 메모리에서 계산한 뒤 H열 전체를 한 번에 써서(setValues) 시트 API 호출을 최소화.
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+
+  const START_ROW = 5;
+  const NAME_COL = 2;  // B열
+  const LINK_COL = 3;  // C열 (블록 내 상대 인덱스 1)
+  const TYPE_COL = 4;  // D열 (블록 내 상대 인덱스 2)
+  const H_COL = 8;     // H열 (블록 내 상대 인덱스 6)
+  const BLOCK_WIDTH = H_COL - NAME_COL + 1; // B~H = 7열
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow >= START_ROW) {
+    const numRows = lastRow - START_ROW + 1;
+
+    // B~H열 전체를 한 번에 읽기 (시트 API 호출 1회)
+    const data = sheet.getRange(START_ROW, NAME_COL, numRows, BLOCK_WIDTH).getValues();
+
+    const idxName = 0;             // B
+    const idxLink = LINK_COL - NAME_COL;   // C → 1
+    const idxType = TYPE_COL - NAME_COL;   // D → 2
+    const idxH = H_COL - NAME_COL;         // H → 6
+
+    for (let i = 0; i < data.length; i++) {
+      const name = String(data[i][idxName] || "").trim();
+      if (!name) continue; // 그룹 시작 행이 아니면 건너뜀
+
+      // 다음 그룹 시작 행(다음 이름이 나오는 인덱스) 찾기
+      let nextIndex = data.length;
+      for (let j = i + 1; j < data.length; j++) {
+        if (String(data[j][idxName] || "").trim() !== "") {
+          nextIndex = j;
+          break;
+        }
+      }
+
+      const link = data[i][idxH];
+      if (!link) continue; // 모음집 링크가 없는 그룹은 대상 아님
+
+      const dateRowIndex = i + 2;
+      const dateValue = dateRowIndex < data.length ? data[dateRowIndex][idxH] : "";
+
+      // 완료 날짜(H+2)가 비어있는 그룹만 내용(H+1)을 새로 구성해서 덮어씀
+      if (!dateValue) {
+        // 그룹 범위(i ~ nextIndex-1) 내 링크/육성도 수집
+        const links = [];
+        const types = [];
+        for (let row = i; row < nextIndex; row++) {
+          const linkValue = String(data[row][idxLink] || "").trim();
+          if (linkValue) {
+            links.push(linkValue);
+            types.push(String(data[row][idxType] || "").trim());
+          }
+        }
+
+        const content = buildCollectionPostContent(name, links, types);
+
+        const contentRowIndex = i + 1;
+        if (contentRowIndex < data.length) {
+          data[contentRowIndex][idxH] = content; // 메모리 상에서만 갱신 (아직 시트에 안 씀)
+        }
+      }
+    }
+
+    // H열 전체를 한 번에 써서 반영 (시트 API 호출 1회)
+    const hColumnValues = data.map(function (row) {
+      return [row[idxH]];
+    });
+    sheet.getRange(START_ROW, H_COL, numRows, 1).setValues(hColumnValues);
+  }
+
+  // ---- 신호 전송 (기존 m_normal_bl.yml 재활용) ----
+  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_PAT");
+
+  const url =
+    "https://api.github.com/repos/codec23567/catfiestagitsheet235/actions/workflows/m_normal_bl.yml/dispatches";
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json"
+    },
+    payload: JSON.stringify({
+      ref: "main",
+      inputs: {
+        sheet_name: sheetName
+      }
+    }),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+
+  Logger.log(response.getResponseCode());
+  Logger.log(response.getContentText());
+}
+
+/*
+ * 그룹(캐릭터)의 게시 내용을 구성하는 함수.
+ * 기존 H5 배열 수식(=MAP(...))의 로직을 그대로 옮긴 순수 계산 함수.
+ * (배열 수식은 해당 영역에 값을 직접 입력하면 깨지므로, 스크립트 계산 방식으로 전환)
+ *
+ * - 링크가 3개 미만이면 빈 문자열
+ * - 3개 이상이면, 육성도가 바뀔 때만 "이름(단계)" 라벨을 붙이고
+ *   나머지는 링크만 이어붙여서 전체를 "§"로 연결
+ *
+ * name: 캐릭터 이름
+ * links: 그룹 내 링크 배열 (빈 값 제외됨)
+ * types: links와 같은 순서의 육성도 배열
+ */
+function buildCollectionPostContent(name, links, types) {
+  const n = links.length;
+  if (n < 3) return "";
+
+  const tokens = [];
+  for (let i = 0; i < n; i++) {
+    if (i === 0 || types[i] !== types[i - 1]) {
+      tokens.push(name + "(" + types[i] + ")");
+      tokens.push(links[i]);
+    } else {
+      tokens.push(links[i]);
+    }
+  }
+
+  return tokens.join("§");
+}
+__________________________________________________________________________________
+function onEdit(e) {
+  if (!e || !e.range) return;
+  
+  // [최적화] 동시 실행 과부하 방지 락 시작
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(1000); // 1초 동안 앞선 작업이 끝나길 대기
+  } catch (error) {
+    return; // 과부하 방지를 위해 현재 실행 취소
+  }
+  
+  const range = e.range;
+  const sheet = range.getSheet();
+  const sheetName = sheet.getName();
+  
+  // 대상 시트 목록 유지
+  const targetSheets = [
+    "다군", "바사", "갤걸", "드엠", "울소", 
+    "닼히", "갓즈", "아워즈", "픽시즈", "루가족", "걸몬", "바스/인축", "블루아이즈", "레전드레어"
+  ];
+  
+  if (!targetSheets.includes(sheetName)) {
+    if (lock.hasLock()) lock.releaseLock(); 
+    return;
+  }
+  
+  // 내용 변화가 없는 단순 엔터는 실행 취소
+  if (e.value !== undefined && e.value === e.oldValue) {
+    if (lock.hasLock()) lock.releaseLock(); 
+    return;
+  }
+  
+  // [열/행 설정 정의]
+  const charColumn = 2; // B열: 캐릭터명
+  const linkColumn = 3; // C열: 링크
+  const specColumn = 4; // D열: 육성도 (드롭다운)
+  const dateColumn = 5; // E열: 날짜
+  const authorColumn = 6; // F열: 작성자
+  const startRow = 5;    // 데이터 시작 행 (5행)
+
+  const editedColumn = range.getColumn();
+  const editedLastColumn = range.getLastColumn();
+  const editedRow = range.getRow();
+  const editedLastRow = range.getLastRow();
+  
+  // [감시 범위] B열(2)부터 F열(6)까지 중 하나라도 걸치면 통과
+  if (editedLastColumn < charColumn || editedColumn > authorColumn || editedLastRow < startRow) {
+    if (lock.hasLock()) lock.releaseLock();
+    return;
+  }
+  
+  const sheetLastRow = sheet.getLastRow();
+  let maxRowToProcess = Math.max(sheetLastRow, editedLastRow);
+  if (maxRowToProcess < startRow) maxRowToProcess = startRow; 
+  
+  const totalRowsCount = maxRowToProcess - startRow + 1;
+  
+  // =========================================================================
+  // [작업 1] 기존 블록 단위 점선 테두리 설정 로직 (기존 로직 100% 유지)
+  // =========================================================================
+  const bValues = sheet.getRange(startRow, charColumn, totalRowsCount, 1).getValues();
+  
+  let currentStatus = null;
+  let startIdx = 0;
+  
+  for (let i = 0; i < bValues.length; i++) {
+    const hasData = (bValues[i][0] !== "");
+    
+    if (currentStatus === null) {
+      currentStatus = hasData;
+      startIdx = i;
+    } else if (hasData !== currentStatus) {
+      const rowCount = i - startIdx;
+      const blockRange = sheet.getRange(startRow + startIdx, charColumn, rowCount, 6);
+      
+      if (currentStatus) {
+        blockRange.setBorder(true, null, null, null, null, true, "#000000", SpreadsheetApp.BorderStyle.DOTTED);
+      } else {
+        blockRange.setBorder(false, null, null, null, null, false, null, null);
+      }
+      
+      currentStatus = hasData;
+      startIdx = i;
+    }
+  }
+  
+  if (currentStatus !== null) {
+    const rowCount = bValues.length - startIdx;
+    const blockRange = sheet.getRange(startRow + startIdx, charColumn, rowCount, 6);
+    
+    if (currentStatus) {
+      blockRange.setBorder(true, null, null, null, null, true, "#000000", SpreadsheetApp.BorderStyle.DOTTED);
+    } else {
+      blockRange.setBorder(false, null, null, null, null, false, null, null);
+    }
+  }
+
+  // =========================================================================
+  // [작업 2] 캐릭터별 내부 정렬 및 날짜 포맷 원천 고정 로직 (새로 빌드)
+  // =========================================================================
+  const fullRange = sheet.getRange(startRow, charColumn, totalRowsCount, 5);
+  const fullValues = fullRange.getDisplayValues(); // 화면에 보이는 텍스트 그대로 가져옴
+  
+  // C열(링크)만 실제 값(하이퍼링크 객체/URL)을 따로 백업
+  const linkActualValues = sheet.getRange(startRow, linkColumn, totalRowsCount, 1).getValues();
+  
+  const specPriority = {
+    '4진': 1,
+    '초본': 1, // 동률 1순위
+    '본능': 2,
+    '3진': 3,
+    '2진': 4
+  };
+
+  let blocks = [];
+  let currentBlock = null;
+
+  // 1) 데이터 블록 쪼개기
+  for (let i = 0; i < fullValues.length; i++) {
+    const charName = fullValues[i][0].toString().trim();
+    const linkVal = linkActualValues[i][0];
+    const specVal = fullValues[i][2].toString().trim();
+    const dateVal = fullValues[i][3].toString().trim();
+    const authorVal = fullValues[i][4].toString().trim();
+
+    if (charName !== "") {
+      if (currentBlock) blocks.push(currentBlock);
+      currentBlock = { name: charName, rows: [] };
+    }
+
+    if (currentBlock) {
+      currentBlock.rows.push({ link: linkVal, spec: specVal, date: dateVal, author: authorVal });
+    }
+  }
+  if (currentBlock) blocks.push(currentBlock);
+
+  // 2) 블록 내부 정렬 수행 및 결과 배열 생성
+  let resultValues = [];
+
+  blocks.forEach(block => {
+    let validRows = block.rows.filter(r => r.link !== "" || r.spec !== "" || r.date !== "" || r.author !== "");
+    
+    // 순서 정렬 로직 (기존 규칙 유지)
+    validRows.sort((a, b) => {
+      const pA = specPriority[a.spec] !== undefined ? specPriority[a.spec] : 999;
+      const pB = specPriority[b.spec] !== undefined ? specPriority[b.spec] : 999;
+      
+      if (pA !== pB) return pA - pB;
+      
+      const dateA = parseDateInternal(a.date);
+      const dateB = parseDateInternal(b.date);
+      return dateA - dateB;
+    });
+    
+    let blockLength = block.rows.length;
+    for (let i = 0; i < blockLength; i++) {
+      let charCellVal = (i === 0) ? block.name : "";
+      let cellLink = "";
+      let cellSpec = "";
+      let cellDate = "";
+      let cellAuthor = "";
+
+      if (i < validRows.length) {
+        cellLink = validRows[i].link;
+        cellSpec = validRows[i].spec;
+        // 어떤 형식이든 텍스트 가공 단에서 "YYYY. MM. DD" 문자열 구조로 강제 고정
+        cellDate = normalizeDateString(validRows[i].date); 
+        cellAuthor = validRows[i].author;
+      }
+      
+      resultValues.push([charCellVal, cellLink, cellSpec, cellDate, cellAuthor]);
+    }
+  });
+
+  // 3) [핵심 안전장치] 값을 시트에 최종 쓰기 전에 날짜 열(E열) 전체를 서식 없는 '일반 텍스트'("@")로 선제 잠금
+  // 구글 시트가 대입되는 텍스트를 인식하여 자릿수를 강제 변환하는 행위를 원천 차단합니다.
+  const dateRange = sheet.getRange(startRow, dateColumn, totalRowsCount, 1);
+  dateRange.setNumberFormat("@"); 
+
+  // 데이터 최종 반영 (B열~F열)
+  fullRange.setValues(resultValues);
+
+  // [완료] 락 해제
+  if (lock.hasLock()) lock.releaseLock();
+}
+
+// 날짜 문자열을 무조건 2자리 포맷의 "YYYY. MM. DD" 형태로 재조립하는 안전 함수
+function normalizeDateString(dateStr) {
+  if (!dateStr) return "";
+  const matches = dateStr.match(/\d+/g);
+  if (matches && matches.length >= 3) {
+    const year = matches[0];
+    const month = matches[1].length === 1 ? "0" + matches[1] : matches[1];
+    const day = matches[2].length === 1 ? "0" + matches[2] : matches[2];
+    return year + ". " + month + ". " + day;
+  }
+  return dateStr;
+}
+
+// 정렬을 위해 날짜의 선후 관계를 판단하는 파싱 함수
+function parseDateInternal(dateStr) {
+  if (!dateStr) return Infinity;
+  const matches = dateStr.match(/\d+/g);
+  if (matches && matches.length >= 3) {
+    const year = parseInt(matches[0], 10);
+    const month = parseInt(matches[1], 10) - 1;
+    const day = parseInt(matches[2], 10);
+    return new Date(year, month, day).getTime();
+  }
+  return Infinity;
+}
+
+
+__________________________________________________________________________________
+
+시리즈관리 텍스트조인
+
+=TEXTJOIN("", TRUE, J5:K)
+
+__________________________________________________________________________________
+
+=MAP(INDEX(B5:B, 1):INDEX(B5:B, MAX(FILTER(ROW(B5:B), B5:B<>""))-4), LAMBDA(currentName, 
+  LET(
+    currentRow, ROW(currentName),
+    
+    IF(ISBLANK(currentName), "",
+      LET(
+        nextRow, currentRow + 1,
+        remainingB, OFFSET(currentName, 1, 0, 1000 - currentRow, 1),
+        nextNameOffset, IFNA(MATCH(FALSE, INDEX(ISBLANK(remainingB), 0, 1), 0), 1000),
+        
+        cRange, OFFSET(currentName, 0, 1, nextNameOffset, 1),
+        allLinks, IFNA(FILTER(cRange, LEN(cRange)>0), ""),
+        linkCount, IF(INDEX(allLinks, 1, 1)="", 0, COUNTA(allLinks)),
+        
+        gValue, OFFSET(currentName, 0, 5),
+        
+        IF(linkCount = 0, "",
+          IF(linkCount >= 3,
+            IF(ISBLANK(gValue), "모음집 링크를 입력해주세요", 
+              "<br><span style="&CHAR(34)&"font-size: 22px;"&CHAR(34)&"><a href="&CHAR(34)&gValue&CHAR(34)&"><b>"&currentName&"</b></a></span>"
+            ),
+            "<br><span style="&CHAR(34)&"font-size: 22px;"&CHAR(34)&">"&
+            IF(linkCount = 2,
+              "<a href="&CHAR(34)&INDEX(allLinks, 1, 1)&CHAR(34)&"><b>"&currentName&"1</b></a> / <a href="&CHAR(34)&INDEX(allLinks, 2, 1)&CHAR(34)&"><b>2</b></a>",
+              "<a href="&CHAR(34)&INDEX(allLinks, 1, 1)&CHAR(34)&"><b>"&currentName&"</b></a>"
+            )&
+            "</span>"
+          ) & "<div style="&CHAR(34)&"font-size:33px;"&CHAR(34)&"><br></div>"
+        )
+      )
+    )
+  ))
+)
+__________________________________________________________________________________
+
+=LET(
+  sheet_keys, {"다군"; "바사"; "갤걸"; "드엠"; "울소"; "닼히"; "갓즈"; "아워즈"; "픽시즈"; "루가족"; "걸몬"; "바스/인축"},
+  sheet_fullnames, {"<다이너마이트군단>"; "<초환수바사라즈>"; "<갤럭시걸즈>"; "<드래곤엠페러스>"; "<울트라소울즈>"; "<다크히어로즈>"; "<기간트제우스>"; "<아이언워즈>"; "<엘레멘탈픽시즈>"; "<고양이루가족>"; "<걸즈몬스터즈>"; "<바스터즈/인축>"},
+  c3_links, {'다군'!C3; '바사'!C3; '갤걸'!C3; '드엠'!C3; '울소'!C3; '닼히'!C3; '갓즈'!C3; '아워즈'!C3; '픽시즈'!C3; '루가족'!C3; '걸몬'!C3; '바스/인축'!C3},
+
+  full_data, {
+    INDEX(IFERROR(MAP('다군'!B1:B503, LAMBDA(x, "다군"))),), '다군'!B1:K503;
+    INDEX(IFERROR(MAP('바사'!B1:B502, LAMBDA(x, "바사"))),), '바사'!B1:K502;
+    INDEX(IFERROR(MAP('갤걸'!B1:B499, LAMBDA(x, "갤걸"))),), '갤걸'!B1:K499;
+    INDEX(IFERROR(MAP('드엠'!B1:B501, LAMBDA(x, "드엠"))),), '드엠'!B1:K501;
+    INDEX(IFERROR(MAP('울소'!B1:B500, LAMBDA(x, "울소"))),), '울소'!B1:K500; 
+    INDEX(IFERROR(MAP('닼히'!B1:B502, LAMBDA(x, "닼히"))),), '닼히'!B1:K502; 
+    INDEX(IFERROR(MAP('갓즈'!B1:B500, LAMBDA(x, "갓즈"))),), '갓즈'!B1:K500; 
+    INDEX(IFERROR(MAP('아워즈'!B1:B501, LAMBDA(x, "아워즈"))),), '아워즈'!B1:K501; 
+    INDEX(IFERROR(MAP('픽시즈'!B1:B500, LAMBDA(x, "픽시즈"))),), '픽시즈'!B1:K500; 
+    INDEX(IFERROR(MAP('루가족'!B1:B499, LAMBDA(x, "루가족"))),), '루가족'!B1:K499; 
+    INDEX(IFERROR(MAP('걸몬'!B1:B503, LAMBDA(x, "걸몬"))),), '걸몬'!B1:K503; 
+    INDEX(IFERROR(MAP('바스/인축'!B1:B504, LAMBDA(x, "바스/인축"))),), '바스/인축'!B1:K504
+  },
+  sheet_names, INDEX(full_data,,1),
+  raw_names, INDEX(full_data,,2),
+  raw_coll, INDEX(full_data,,8),
+  raw_images, INDEX(full_data,,10),
+  raw_L, INDEX(full_data,,5),
+
+  filled_names, SCAN("", raw_names, LAMBDA(a, b, IF(b="", a, b))),
+  filled_coll, SCAN("", SEQUENCE(ROWS(full_data)), LAMBDA(a, i, 
+    IF(INDEX(raw_names, i) <> "", INDEX(raw_coll, i), IF(INDEX(raw_coll, i) <> "", INDEX(raw_coll, i), a))
+  )),
+  filled_images, SCAN("", SEQUENCE(ROWS(full_data)), LAMBDA(a, i, 
+    IF(INDEX(raw_names, i) <> "", INDEX(raw_images, i), IF(INDEX(raw_images, i) <> "", INDEX(raw_images, i), a))
+  )),
+  filled_L, SCAN("", SEQUENCE(ROWS(full_data)), LAMBDA(a, i,
+    IF(INDEX(raw_names, i) <> "", INDEX(raw_L, i), a)
+  )),
+  links, INDEX(full_data,,3),
+  types, INDEX(full_data,,4),
+
+  filtered_list, FILTER(
+    {sheet_names, filled_names, links, types, filled_coll, filled_images, filled_L}, 
+    (types="초본") + (types="4진")
+  ),
+
+  f_sheets, INDEX(filtered_list,,1),
+  f_names, INDEX(filtered_list,,2),
+  f_links, INDEX(filtered_list,,3),
+  f_types, INDEX(filtered_list,,4),
+  f_coll, INDEX(filtered_list,,5),
+  f_images, INDEX(filtered_list,,6),
+  f_L, INDEX(filtered_list,,7),
+
+  {
+    MAP(SEQUENCE(ROWS(f_sheets)), LAMBDA(i, IF(i=1, INDEX(f_sheets, i), IF(INDEX(f_sheets, i) = INDEX(f_sheets, i-1), "", INDEX(f_sheets, i))))),
+    MAP(SEQUENCE(ROWS(f_names)), LAMBDA(i, IF(i=1, INDEX(f_names, i), IF(INDEX(f_names, i) = INDEX(f_names, i-1), "", INDEX(f_names, i))))), 
+    f_links, 
+    f_types, 
+
+    MAP(SEQUENCE(ROWS(f_L)), LAMBDA(i, IF(i=1, INDEX(f_L, i), IF(INDEX(f_names, i) = INDEX(f_names, i-1), "", INDEX(f_L, i))))),
+
+    MAP(SEQUENCE(ROWS(f_names)), LAMBDA(i, 
+      LET(
+        currName, INDEX(f_names, i),
+        totalRawLinks, COUNTIFS(filled_names, currName, links, "<>"),
+        IF(totalRawLinks <= 2, "",
+          IF(INDEX(f_links, i) = "", "", 
+            IF(i=1, INDEX(f_coll, i), IF(INDEX(f_names, i) = INDEX(f_names, i-1), "", INDEX(f_coll, i)))
+          )
+        )
+      )
+    )),
+
+    MAP(SEQUENCE(ROWS(f_sheets)), LAMBDA(i, 
+      LET(
+        header_val, IF(OR(i=1, INDEX(f_sheets, i) <> INDEX(f_sheets, i-1)), 
+          LET(
+            curr_sheet, INDEX(f_sheets, i),
+            idx, MATCH(curr_sheet, sheet_keys, 0),
+            link, INDEX(c3_links, idx),
+            fname, INDEX(sheet_fullnames, idx),
+            "<br><span style=""font-size: 28px;""><a href=""" & link & """><b>" & fname & "</b></a></span><div style=""font-size:28px;""><br></div>"
+          ),
+          ""
+        ),
+        image_val, IF(INDEX(f_links, i) = "", "", 
+          IF(i=1, INDEX(f_images, i), IF(INDEX(f_names, i) = INDEX(f_names, i-1), "", INDEX(f_images, i)))
+        ),
+        IF(header_val = "", image_val, header_val & image_val)
+      )
+    ))
+  }
+)
+__________________________________________________________________________________
+
+리뷰 모음집 초사
+
+=TEXTJOIN("", TRUE, G5:H)
+
+
+
+__________________________________________________________________________________
+
+리뷰 모음집 메모용 초사
+
+=LET(
+  srcA, A5:A502,
+  srcB, B5:B502,
+  srcD, D5:D502,
+  data, FILTER(HSTACK(srcA,srcB,srcD), srcB<>""),
+  n, ROWS(data),
+  result, REDUCE(
+    HSTACK("_seed_","_seed_"),
+    SEQUENCE(n),
+    LAMBDA(acc,i,
+      LET(
+        ser, INDEX(data,i,1),
+        nm, INDEX(data,i,2),
+        gr, INDEX(data,i,3),
+        rowOut, HSTACK(nm, IF(gr="4진","(4진)","")),
+        IF(ser="",
+          VSTACK(acc, rowOut),
+          IF(i=1,
+            VSTACK(acc, HSTACK("<"&ser&">",""), rowOut),
+            VSTACK(acc, HSTACK("",""), HSTACK("<"&ser&">",""), rowOut)
+          )
+        )
+      )
+    )
+  ),
+  table, CHOOSEROWS(result, SEQUENCE(ROWS(result)-1,1,2)),
+  TEXTJOIN(
+    "",
+    FALSE,
+    {
+      "<br>";
+      "<div><a href=""https://m.dcinside.com/board/yavetwarch/1475496""><span style=""font-size: 22px;"">초본/4진 라인업 정리글</span></a></div>";
+      "<br>";
+      "<div>─────────</div>";
+      "<br>";
+      "<div>"&TEXT(NOW(),"yyyy. m. d h""시 ""m""분""")&" 수정 </div><br>";
+      BYROW(
+        table,
+        LAMBDA(r,
+          IF(INDEX(r,1,1)="",
+            "<br>",
+            "<div>"&
+              SUBSTITUTE(
+                SUBSTITUTE(
+                  SUBSTITUTE(TEXTJOIN(" ",TRUE,r),"&","&amp;"),
+                "<","&lt;"),
+              ">","&gt;")
+            &" </div>"
+          )
+        )
+      );
+      "<br><br>";
+      "<div>초본 "&COUNTIFS(srcB,"*?",srcD,"초본")&"개 </div>";
+      "<div>4진 "&COUNTIFS(srcB,"*?",srcD,"4진")&"개 </div>";
+      "<br><br>";
+      "<br><span><a href=""https://m.dcinside.com/board/yavetwarch/1499797""><b>버전별 초/4 업데이트 목록</b></a></span><div><br></div>"
+    }
+  )
+)
+__________________________________________________________________________________
+
+=LET(
+  b, FILTER(B5:B502, B5:B502<>"", E5:E502<>""),
+  d, FILTER(D5:D502, B5:B502<>"", E5:E502<>""),
+  e, FILTER(E5:E502, B5:B502<>"", E5:E502<>""),
+  eR, ARRAYFORMULA(ROUND(e*10,0)),
+  majorAll, ARRAYFORMULA(INT(eR/10)),
+  majors, SORT(UNIQUE(majorAll)),
+  vseqRaw, REDUCE(
+    "_seed_",
+    majors,
+    LAMBDA(acc, m,
+      LET(
+        maxMinor, MAX(ARRAYFORMULA(IF(majorAll=m, eR, 0))),
+        rng, SEQUENCE(maxMinor-m*10+1,1,m*10,1),
+        VSTACK(acc, rng)
+      )
+    )
+  ),
+  vseq, CHOOSEROWS(vseqRaw, SEQUENCE(ROWS(vseqRaw)-1,1,2,1)),
+  escapedB, ARRAYFORMULA(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(b,"&","&amp;"),"<","&lt;"),">","&gt;")),
+  blocksHtml, MAP(vseq, LAMBDA(v,
+    LET(
+      label, TEXT(v/10,"0.0"),
+      itemsText, IFERROR(TEXTJOIN(CHAR(10), TRUE, ARRAYFORMULA(IF(eR=v, "• "&escapedB&" ("&d&")", ""))), ""),
+      itemsHtml, IF(itemsText="", "", TEXTJOIN("", TRUE, ARRAYFORMULA("<div>"&SPLIT(itemsText, CHAR(10))&"</div>"))),
+      "<div>"&label&"</div>"&itemsHtml
+    )
+  )),
+  n, ROWS(vseq),
+  finalHtml, REDUCE(
+    "",
+    SEQUENCE(n),
+    LAMBDA(acc, i,
+      LET(
+        curMajor, INT(INDEX(vseq,i,1)/10),
+        prevMajor, IF(i=1, curMajor, INT(INDEX(vseq,i-1,1)/10)),
+        sep, IF(i=1, "",
+              IF(curMajor<>prevMajor,
+                "<br><div>─────</div><br>",
+                "<br>"
+              )
+            ),
+        acc & sep & INDEX(blocksHtml,i,1)
+      )
+    )
+  ),
+  "<br>" & finalHtml
+)
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+__________________________________________________________________________________
+
+
+
+
+
+
+
+

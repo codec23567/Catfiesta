@@ -1,0 +1,87 @@
+# First commit: 2026-07-20
+# Last commit: 2026-07-21
+name: Modify Post
+
+
+on:
+  workflow_dispatch:
+    inputs:
+
+      mode:
+        description: "Editor Mode"
+        required: true
+        type: string
+        
+      sheet:
+        description: "Sheet Name"
+        required: false
+        type: string
+        
+      id:
+        description: "User ID"
+        required: false
+
+        type: string
+
+      pw:
+        description: "User Password"
+        required: false
+        type: string
+
+      url:
+        description: "Modify URL"
+        required: false
+        type: string
+
+      urls:
+        required: false
+        type: string
+      
+      html:
+        description: "HTML"
+        required: false
+        type: string    
+
+      text:
+        description: "Text"
+        required: false
+        type: string
+
+
+jobs:
+  modify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          INPUT_MODE: ${{ github.event.inputs.mode }}
+          INPUT_ID: ${{ github.event.inputs.id }}
+          INPUT_PW: ${{ github.event.inputs.pw }}
+          INPUT_URL: ${{ github.event.inputs.url }}
+          INPUT_URLS: ${{ github.event.inputs.urls }}
+          INPUT_HTML: ${{ github.event.inputs.html }}
+          INPUT_TEXT: ${{ github.event.inputs.text }}
+
+          GAS_WEBAPP_URL: ${{ secrets.GAS_WEBAPP_URL }}
+          GAS_SECRET: ${{ secrets.GAS_SECRET }}
+          
+        run: python run.py
+
+
+
+
+        

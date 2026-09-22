@@ -1,0 +1,40 @@
+# First commit: 2026-08-12
+# Last commit: 2026-08-12
+=MAP(
+  INDEX(B5:B,1):INDEX(B5:B,MAX(FILTER(ROW(B5:B),B5:B<>""))-4),
+  LAMBDA(currentName,
+    LET(
+      currentRow,ROW(currentName),
+      IF(currentName="","",
+        LET(
+          remainingB,OFFSET(currentName,1,0,1000-currentRow,1),
+          nextNameOffset,IFNA(MATCH(FALSE,INDEX(ISBLANK(remainingB),0,1),0),1000),
+          links,IFNA(FILTER(OFFSET(currentName,0,1,nextNameOffset,1),LEN(OFFSET(currentName,0,1,nextNameOffset,1))),""),
+          types,IFNA(FILTER(OFFSET(currentName,0,2,nextNameOffset,1),LEN(OFFSET(currentName,0,1,nextNameOffset,1))),""),
+          n,IF(INDEX(links,1,1)="",0,ROWS(links)),
+          IF(
+            n<3,
+            "",
+            TEXTJOIN(
+              "§",TRUE,
+              MAP(
+                SEQUENCE(n),
+                LAMBDA(i,
+                  IF(
+                    i=1,
+                    currentName&"("&INDEX(types,i)&")§"&INDEX(links,i),
+                    IF(
+                      INDEX(types,i)=INDEX(types,i-1),
+                      INDEX(links,i),
+                      currentName&"("&INDEX(types,i)&")§"&INDEX(links,i)
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)

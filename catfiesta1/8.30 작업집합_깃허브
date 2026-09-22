@@ -1,0 +1,2469 @@
+# First commit: 2026-08-30
+# Last commit: 2026-08-30
+.github/workflows
+image.yml
+m_html.yml
+m_normal.yml
+m_normal_bl.yml
+nickdate.yml
+image
+regex_test.py
+select_organize_image.py
+modify_html_ver
+login_modify_html.py
+read_host_html.py
+modify_normal_bl_ver
+login_modify_multiple.py
+read_host_normal_bl.py
+modify_normal_ver
+login_modify_normal.py
+read_host_normal.py
+nickdate
+nickdate_test.py
+select_organize_nickdate.py
+.gitignore
+README.md
+requirements.txt
+
+__________________________________________________________
+name: Image Crawler
+
+on:
+  workflow_dispatch:
+    inputs:
+      sheet_name:
+        description: "Target sheet"
+        required: true
+        type: string
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install packages
+        run: pip install -r requirements.txt
+
+      - name: Run Python
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          TARGET_SHEET: ${{ github.event.inputs.sheet_name }}
+        run: python image/select_organize_image.py
+
+
+
+__________________________________________________________
+name: Modify HTML
+
+on:
+  workflow_dispatch:
+    inputs:
+      sheet_name:
+        description: "Target sheet"
+        required: true
+        type: string
+
+jobs:
+  modify-html:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium gspread google-auth
+
+      - name: Run Modify HTML
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          TARGET_SHEET: ${{ github.event.inputs.sheet_name }}
+          CAT_ID: ${{ secrets.CAT_ID }}
+          CAT_PW: ${{ secrets.CAT_PW }}
+        run: python modify_html_ver/read_host_html.py
+__________________________________________________________
+name: Modify Normal
+
+on:
+  workflow_dispatch:
+    inputs:
+      sheet_name:
+        description: "Target sheet"
+        required: true
+        type: string
+
+jobs:
+  modify-normal:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium gspread google-auth
+
+      - name: Run Modify Normal
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          TARGET_SHEET: ${{ github.event.inputs.sheet_name }}
+          CAT_ID: ${{ secrets.CAT_ID }}
+          CAT_PW: ${{ secrets.CAT_PW }}
+        run: python modify_normal_ver/read_host_normal.py
+__________________________________________________________
+name: Modify Normal bl
+
+on:
+  workflow_dispatch:
+    inputs:
+      sheet_name:
+        description: "Target sheet"
+        required: true
+        type: string
+
+jobs:
+  modify-normal:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium gspread google-auth
+
+      - name: Run Modify Normal bl
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          TARGET_SHEET: ${{ github.event.inputs.sheet_name }}
+          CAT_ID: ${{ secrets.CAT_ID }}
+          CAT_PW: ${{ secrets.CAT_PW }}
+        run: python modify_normal_bl_ver/read_host_normal_bl.py
+__________________________________________________________
+name: Nickdate Crawler
+
+on:
+  workflow_dispatch:
+    inputs:
+      sheet_name:
+        description: "Target sheet"
+        required: true
+        type: string
+
+jobs:
+ test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install packages
+        run: pip install -r requirements.txt
+
+      - name: Run Python
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          TARGET_SHEET: ${{ github.event.inputs.sheet_name }}
+        run: python nickdate/select_organize_nickdate.py
+__________________________________________________________
+
+import requests
+import re
+import time
+
+
+def extract_images(url):
+
+    total_start = time.time()
+
+    try:
+
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        request_start = time.time()
+
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=30
+        )
+
+        print(
+            f"[시간] HTTP 요청 : {time.time() - request_start:.2f}초",
+            flush=True
+        )
+
+        print(
+            f"[응답] 상태={response.status_code}, 바이트={len(response.content)}",
+            flush=True
+        )
+
+        html = response.text
+
+        # -------------------------
+        # write_div 영역만 추출
+        # -------------------------
+
+        body_part = html
+
+        body_start = html.find('class="write_div"')
+
+        if body_start != -1:
+
+            body_end = html.find(
+                '<script id="mg_numbering-tmpl"',
+                body_start
+            )
+
+            if body_end == -1:
+                body_end = html.find(
+                    '<script',
+                    body_start
+                )
+
+            if body_end != -1:
+                body_part = html[body_start:body_end]
+            else:
+                body_part = html[body_start:]
+
+        # -------------------------
+        # 이미지 추출
+        # -------------------------
+
+        regex_start = time.time()
+
+        img_regex = re.compile(
+            r'<img[^>]*(?:src|data-src|data-original)=["\']([^"\']*viewimage\.php[^"\']*)["\']',
+            re.IGNORECASE
+        )
+
+        matches = img_regex.findall(body_part)
+
+        images = []
+
+        for src in matches:
+
+            if src.startswith("/"):
+                src = "https://www.dcinside.com" + src
+
+            src = src.replace("&amp;", "&")
+
+            images.append(
+                f'<img src="{src}">'
+            )
+
+        print(
+            f"[시간] 정규식 : {time.time() - regex_start:.4f}초",
+            flush=True
+        )
+
+        print(
+            f"[결과] 이미지 수 : {len(images)}",
+            flush=True
+        )
+
+        print(
+            f"[시간] 전체 : {time.time() - total_start:.2f}초",
+            flush=True
+        )
+
+        return images
+
+    except Exception as e:
+
+        print(f"[오류] {url}", flush=True)
+        print(e, flush=True)
+
+        return []
+__________________________________________________________
+
+import os
+import json
+
+import gspread
+from google.oauth2.service_account import Credentials
+from concurrent.futures import ThreadPoolExecutor
+
+from regex_test import extract_images
+
+
+# Google Sheets API 권한
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets"
+]
+
+# GitHub Secret 인증
+credentials = Credentials.from_service_account_info(
+    json.loads(os.environ["GOOGLE_CREDENTIALS"]),
+    scopes=SCOPES
+)
+
+gc = gspread.authorize(credentials)
+
+# 스프레드시트 열기
+spreadsheet = gc.open_by_key(
+    "13Hp2IqBFzHE5L4xqGpieu-GVu0mA79fV06xYuFfnSB0"
+)
+
+worksheet = spreadsheet.worksheet(
+    os.environ["TARGET_SHEET"]
+)
+
+
+# -------------------------------------------------
+# K3:T3 링크 읽기
+# -------------------------------------------------
+
+row3 = worksheet.row_values(3)
+
+requests = []
+
+# K열(11) ~ T열(20)
+for col in range(11, 21):
+
+    index = col - 1
+
+    if index >= len(row3):
+        continue
+
+    url = row3[index].strip()
+
+    if not url:
+        continue
+
+    if "dcinside" not in url:
+        continue
+
+    requests.append(url)
+
+print("이미지 추출 대상 :", len(requests))
+
+for url in requests:
+    print(url)
+
+
+# -------------------------------------------------
+# 병렬 이미지 추출
+# -------------------------------------------------
+
+img_list = []
+
+if requests:
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+
+        results = list(
+            executor.map(
+                extract_images,
+                requests
+            )
+        )
+
+    for images in results:
+
+        if images:
+            img_list.extend(images)
+
+
+# 기존 Apps Script와 동일한 처리
+
+if len(img_list) == 0:
+    img_list = ["본문 이미지 없음"]
+
+
+# -------------------------------------------------
+# B/K 읽기
+# -------------------------------------------------
+
+start_row = 5
+
+last_row = len(worksheet.col_values(2))
+
+if last_row < start_row:
+    last_row = start_row
+
+num_rows = last_row - start_row + 1
+
+b_values = worksheet.get(
+    f"B{start_row}:B{last_row}"
+)
+
+k_values = worksheet.get(
+    f"K{start_row}:K{last_row}"
+)
+
+j_values = worksheet.get(
+    f"J{start_row}:J{last_row}"
+)
+
+
+# 길이 보정
+
+while len(b_values) < num_rows:
+    b_values.append([""])
+
+while len(k_values) < num_rows:
+    k_values.append([""])
+
+while len(j_values) < num_rows:
+    j_values.append([""])
+
+# J열의 빈 행([])을 [""]로 보정
+for i in range(num_rows):
+    if len(j_values[i]) == 0:
+        j_values[i] = [""]
+
+# -------------------------------------------------
+# 기존 validBCount 매칭
+# -------------------------------------------------
+
+valid_b_count = 0
+
+for i in range(num_rows):
+
+    b = b_values[i][0] if b_values[i] else ""
+    k = k_values[i][0] if k_values[i] else ""
+
+    if b and str(b).strip():
+
+        valid_b_count += 1
+
+        if k and str(k).strip():
+
+            if valid_b_count <= len(img_list):
+
+                j_values[i][0] = img_list[valid_b_count - 1]
+
+            else:
+
+                j_values[i][0] = ""
+
+    else:
+
+        if k and str(k).strip():
+            j_values[i][0] = ""
+
+
+# -------------------------------------------------
+# Google Sheets 저장
+# -------------------------------------------------
+
+worksheet.update(
+    range_name=f"J{start_row}:J{last_row}",
+    values=j_values
+)
+
+print("완료")
+
+
+__________________________________________________________
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+import time
+import traceback
+
+
+LOGIN_URL = (
+    "https://sign.dcinside.com/login"
+    "?s_url=https://www.dcinside.com/"
+)
+
+
+def modify_post(
+    user_id,
+    user_pw,
+    modify_url,
+    html
+):
+    print("★★★★★ modify_post 시작 ★★★★★", flush=True)
+    start = time.perf_counter()
+
+    t = time.perf_counter()
+
+    options = Options()
+
+    options.binary_location = "/usr/bin/google-chrome"
+
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+
+    # Chrome 최적화
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-sync")
+    options.add_argument("--metrics-recording-only")
+    options.add_argument("--disable-default-apps")
+
+    # 이미지 로딩 차단
+    options.add_experimental_option(
+        "prefs",
+        {
+            "profile.managed_default_content_settings.images": 2
+        }
+    )
+
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/150.0.0.0 Safari/537.36"
+    )
+
+    driver = webdriver.Chrome(options=options)
+
+    wait = WebDriverWait(driver, 5)
+
+    try:
+
+        # ============================================
+        # 로그인
+        # ============================================
+
+        driver.get(LOGIN_URL)
+
+        id_input = wait.until(
+            EC.visibility_of_element_located(
+                (By.NAME, "user_id")
+            )
+        )
+
+        id_input.clear()
+        id_input.send_keys(user_id)
+
+        pw_input = wait.until(
+            EC.visibility_of_element_located(
+                (By.NAME, "pw")
+            )
+        )
+
+        pw_input.clear()
+        pw_input.send_keys(user_pw)
+
+        login_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button[type='submit']")
+            )
+        )
+
+        login_button.click()
+
+        wait.until(
+            EC.url_changes(LOGIN_URL)
+        )
+
+        print(
+            f"[시간] 로그인 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        t = time.perf_counter()
+
+        # ============================================
+        # 수정 페이지 이동
+        # ============================================
+
+        driver.get(modify_url)
+
+        # ============================================
+        # HTML 모드
+        # ============================================
+
+        html_button = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    "//button[normalize-space()='HTML']"
+                )
+            )
+        )
+
+        print(
+            f"[시간] 수정페이지 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        t = time.perf_counter()
+
+        html_button.click()
+
+        # ============================================
+        # 본문 교체
+        # ============================================
+
+        html_area = wait.until(
+            EC.visibility_of_element_located(
+                (
+                    By.CSS_SELECTOR,
+                    ".note-codable"
+                )
+            )
+        )
+
+        # HTML 크기 출력
+        html_size_kb = len(html.encode("utf-8")) / 1024
+
+        print(
+            f"[HTML] 길이 : {len(html):,}자 / "
+            f"UTF-8 크기 : {html_size_kb:,.1f} KB",
+            flush=True
+        )
+
+        # ============================================
+        # send_keys() 대신 JavaScript로 직접 주입
+        # ============================================
+
+        driver.execute_script(
+            """
+            arguments[0].value = arguments[1];
+
+            arguments[0].dispatchEvent(
+                new Event('input', { bubbles: true })
+            );
+
+            arguments[0].dispatchEvent(
+                new Event('change', { bubbles: true })
+            );
+            """,
+            html_area,
+            html
+        )
+
+        # ============================================
+        # 실제 입력 결과 확인
+        # ============================================
+
+        actual_length = driver.execute_script(
+            "return arguments[0].value.length;",
+            html_area
+        )
+
+        print(
+            f"[HTML] 원본={len(html):,}자 / "
+            f"입력={actual_length:,}자",
+            flush=True
+        )
+
+        if actual_length != len(html):
+            raise RuntimeError(
+                f"HTML 입력 불일치: "
+                f"원본 {len(html):,}자 / "
+                f"입력 {actual_length:,}자"
+            )
+
+        print(
+            f"[시간] 본문입력 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        t = time.perf_counter()
+
+        # ============================================
+        # 수정 버튼
+        # ============================================
+
+        write_button = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    "button.btn_blue.write"
+                )
+            )
+        )
+
+        write_button.click()
+
+        print(
+            f"[시간] 저장 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        return {
+            "success": True
+        }
+
+    except Exception as e:
+
+        traceback.print_exc()
+
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+    finally:
+
+        elapsed = time.perf_counter() - start
+
+        print(
+            f"[modify_post] 실행시간: {elapsed:.2f}초",
+            flush=True
+        )
+
+        driver.quit()
+
+__________________________________________________________
+
+import os
+import json
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import gspread
+from google.oauth2.service_account import Credentials
+
+from login_modify_html import modify_post
+
+
+# -------------------------------------------------
+# 모바일 게시글 URL → PC 수정 URL 변환
+# -------------------------------------------------
+
+def to_modify_url(url):
+    url = str(url or "").strip()
+
+    # 모바일 게시글 URL
+    # https://m.dcinside.com/board/catfiesta/58
+    match = re.fullmatch(
+        r"https://m\.dcinside\.com/board/([^/]+)/(\d+)",
+        url,
+    )
+
+    if match:
+        gallery_id = match.group(1)
+        post_no = match.group(2)
+
+        return (
+            "https://gall.dcinside.com/mgallery/board/modify/"
+            f"?id={gallery_id}&no={post_no}"
+        )
+
+    # 이미 PC 수정 URL인 경우 등은 그대로 사용
+    return url
+
+
+# -------------------------------------------------
+# Google Sheets 인증
+# -------------------------------------------------
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets"
+]
+
+credentials = Credentials.from_service_account_info(
+    json.loads(os.environ["GOOGLE_CREDENTIALS"]),
+    scopes=SCOPES
+)
+
+gc = gspread.authorize(credentials)
+
+spreadsheet = gc.open_by_key(
+    "13Hp2IqBFzHE5L4xqGpieu-GVu0mA79fV06xYuFfnSB0"
+)
+
+worksheet = spreadsheet.worksheet(
+    os.environ["TARGET_SHEET"]
+)
+
+
+# -------------------------------------------------
+# GitHub Secrets
+# -------------------------------------------------
+
+user_id = os.environ["CAT_ID"]
+user_pw = os.environ["CAT_PW"]
+
+
+# -------------------------------------------------
+# 실행 상태 기록
+# -------------------------------------------------
+
+worksheet.update(
+    range_name="I9",
+    values=[["실행중"]]
+)
+
+print("실행중")
+
+
+# -------------------------------------------------
+# 시트 데이터 읽기
+# -------------------------------------------------
+
+modify_url = worksheet.acell("C3").value
+
+if modify_url:
+    modify_url = modify_url.strip()
+else:
+    modify_url = ""
+
+html = worksheet.acell("I5").value or ""
+
+
+# URL이 없으면 종료
+if not modify_url:
+    print("수정 URL이 없습니다.")
+    exit()
+
+
+# -------------------------------------------------
+# 수정 URL 변환
+# -------------------------------------------------
+
+modify_url = to_modify_url(modify_url)
+
+print(f"수정 URL: {modify_url}")
+
+
+# -------------------------------------------------
+# 게시글 수정
+# -------------------------------------------------
+
+result = modify_post(
+    user_id,
+    user_pw,
+    modify_url,
+    html
+)
+
+
+# -------------------------------------------------
+# 결과 기록
+# -------------------------------------------------
+
+if result["success"]:
+
+    # 한국 시간 기준 완료 시각
+    completed_at = datetime.now(
+        ZoneInfo("Asia/Seoul")
+    ).strftime("%m/%d %H:%M:%S")
+
+    worksheet.update(
+        range_name="I9",
+        values=[["완료"]]
+    )
+
+    worksheet.update(
+        range_name="I10",
+        values=[[completed_at]]
+    )
+
+    print(f"완료 : {completed_at}")
+
+else:
+
+    message = result.get("message", "알 수 없는 오류")
+
+    worksheet.update(
+        range_name="I9",
+        values=[[f"실패 : {message}"]]
+    )
+
+    print(f"실패 : {message}")
+
+__________________________________________________________
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+import re
+import time
+import traceback
+import html
+
+LOGIN_URL = (
+    "https://sign.dcinside.com/login"
+    "?s_url=https://www.dcinside.com/"
+)
+
+
+def create_driver():
+    options = Options()
+    options.binary_location = "/usr/bin/google-chrome"
+
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+
+    # Chrome 최적화
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-sync")
+    options.add_argument("--metrics-recording-only")
+    options.add_argument("--disable-default-apps")
+
+    # 이미지 로딩 차단
+    options.add_experimental_option(
+        "prefs",
+        {
+            "profile.managed_default_content_settings.images": 2,
+        },
+    )
+
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/150.0.0.0 Safari/537.36"
+    )
+
+    return webdriver.Chrome(options=options)
+
+
+def login(driver, user_id, user_pw):
+    print("★★★★★ 로그인 시작 ★★★★★", flush=True)
+
+    start = time.perf_counter()
+    wait = WebDriverWait(driver, 5)
+
+    driver.get(LOGIN_URL)
+
+    id_input = wait.until(
+        EC.visibility_of_element_located(
+            (By.NAME, "user_id"),
+        )
+    )
+    id_input.clear()
+    id_input.send_keys(user_id)
+
+    pw_input = wait.until(
+        EC.visibility_of_element_located(
+            (By.NAME, "pw"),
+        )
+    )
+    pw_input.clear()
+    pw_input.send_keys(user_pw)
+
+    login_button = wait.until(
+        EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, "button[type='submit']"),
+        )
+    )
+    login_button.click()
+
+    wait.until(EC.url_changes(LOGIN_URL))
+
+    print(
+        f"[시간] 로그인 : {time.perf_counter() - start:.2f}초",
+        flush=True,
+    )
+
+
+def modify_post(driver, modify_url, text):
+    print("★★★★★ 게시글 수정 시작 ★★★★★", flush=True)
+
+    start = time.perf_counter()
+    t = time.perf_counter()
+
+    wait = WebDriverWait(driver, 5)
+    short_wait = WebDriverWait(driver, 20)
+
+    try:
+        # ============================================
+        # 수정 페이지 이동
+        # ============================================
+        driver.get(modify_url)
+
+        html_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "//button[normalize-space()='HTML']"),
+            )
+        )
+
+        print(
+            f"[시간] 수정페이지 : {time.perf_counter() - t:.2f}초",
+            flush=True,
+        )
+        t = time.perf_counter()
+
+        # ============================================
+        # 기존 본문 삭제
+        # ============================================
+        html_button.click()
+
+        html_area = wait.until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, ".note-codable"),
+            )
+        )
+
+        html_area.clear()
+
+        # 일반 에디터 모드로 복귀
+        html_button.click()
+
+        editor = wait.until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, ".note-editable"),
+            )
+        )
+
+        # 에디터 맨 끝으로 이동
+        editor.click()
+        editor.send_keys(Keys.CONTROL, Keys.END)
+
+        # 한 줄 전체가 URL인 경우에만 OG 카드 생성
+        url_pattern = re.compile(r"^https?://\S+$")
+        lines = text.splitlines()
+
+        # ============================================
+        # 본문 입력
+        # ============================================
+        for index, line in enumerate(lines):
+            is_url = bool(url_pattern.fullmatch(line.strip()))
+            is_last_line = index == len(lines) - 1
+
+            print(f"입력: [{line}]", flush=True)
+
+            # ==================================================
+            # ① URL이 아닌 일반 텍스트
+            # ==================================================
+            if not is_url:
+
+                # ----------------------------------------------
+                # 빈 줄
+                # ----------------------------------------------
+                if not line:
+                    html_button.click()
+
+                    html_area = wait.until(
+                        EC.visibility_of_element_located(
+                            (By.CSS_SELECTOR, ".note-codable"),
+                        )
+                    )
+
+                    driver.execute_script(
+                        """
+                        const area = arguments[0];
+
+                        area.value += '<p><br></p>';
+
+                        area.dispatchEvent(
+                            new Event('input', { bubbles: true })
+                        );
+
+                        area.dispatchEvent(
+                            new Event('change', { bubbles: true })
+                        );
+                        """,
+                        html_area,
+                    )
+
+                    html_button.click()
+
+                    editor = wait.until(
+                        EC.visibility_of_element_located(
+                            (By.CSS_SELECTOR, ".note-editable"),
+                        )
+                    )
+
+                    editor.click()
+                    editor.send_keys(Keys.CONTROL, Keys.END)
+
+                # ----------------------------------------------
+                # 일반 텍스트
+                # 22pt + Bold
+                # ----------------------------------------------
+                else:
+                    # HTML 특수문자 안전 처리
+                    escaped_line = html.escape(line)
+
+                    styled_html = (
+                        '<p>'
+                        '<span style="font-size: 22pt; '
+                        'font-weight: 700;">'
+                        f'{escaped_line}'
+                        '</span>'
+                        '</p>'
+                    )
+
+                    # HTML 모드로 전환
+                    html_button.click()
+
+                    html_area = wait.until(
+                        EC.visibility_of_element_located(
+                            (By.CSS_SELECTOR, ".note-codable"),
+                        )
+                    )
+
+                    # 기존 HTML 맨 뒤에 일반 텍스트를 HTML로 추가
+                    driver.execute_script(
+                        """
+                        const area = arguments[0];
+                        const html = arguments[1];
+
+                        area.value += html;
+
+                        area.dispatchEvent(
+                            new Event('input', { bubbles: true })
+                        );
+
+                        area.dispatchEvent(
+                            new Event('change', { bubbles: true })
+                        );
+                        """,
+                        html_area,
+                        styled_html,
+                    )
+
+                    # 일반 에디터 모드로 복귀
+                    html_button.click()
+
+                    editor = wait.until(
+                        EC.visibility_of_element_located(
+                            (By.CSS_SELECTOR, ".note-editable"),
+                        )
+                    )
+
+                    # HTML 삽입 후에도 반드시 맨 끝으로 이동
+                    editor.click()
+                    editor.send_keys(Keys.CONTROL, Keys.END)
+
+                continue
+
+            # ==================================================
+            # ② URL
+            # ==================================================
+            print("URL 발견 - OG 카드 생성 시작", flush=True)
+
+            # 현재 OG 카드 개수 기록
+            og_count_before = len(
+                driver.find_elements(
+                    By.CSS_SELECTOR,
+                    ".og-div",
+                )
+            )
+
+            # ----------------------------------------------
+            # URL은 기존처럼 일반 에디터에서 입력
+            # ----------------------------------------------
+            editor.click()
+            editor.send_keys(line)
+
+            # OG 카드 생성
+            driver.execute_script(
+                "oglink('paste', false, '');"
+            )
+
+            # ----------------------------------------------
+            # 새로운 OG 카드가 실제로 추가될 때까지 대기
+            # ----------------------------------------------
+            try:
+                short_wait.until(
+                    lambda d: len(
+                        d.find_elements(
+                            By.CSS_SELECTOR,
+                            ".og-div",
+                        )
+                    ) > og_count_before
+                )
+
+            except Exception:
+                current_og_count = len(
+                    driver.find_elements(
+                        By.CSS_SELECTOR,
+                        ".og-div",
+                    )
+                )
+
+                print(
+                    f"OG 카드 생성 실패: "
+                    f"기존 {og_count_before}개 / "
+                    f"현재 {current_og_count}개",
+                    flush=True,
+                )
+
+                print(
+                    "===== OG 생성 실패 시점 HTML =====",
+                    flush=True,
+                )
+
+                print(
+                    editor.get_attribute("innerHTML"),
+                    flush=True,
+                )
+
+                raise
+
+            print("OG 생성 완료", flush=True)
+
+            # ==================================================
+            # URL 뒤에 다음 내용이 있으면 빈 문단 추가
+            # ==================================================
+            if not is_last_line:
+
+                html_button.click()
+
+                html_area = wait.until(
+                    EC.visibility_of_element_located(
+                        (By.CSS_SELECTOR, ".note-codable"),
+                    )
+                )
+
+                driver.execute_script(
+                    """
+                    const area = arguments[0];
+
+                    area.value += '<p><br></p>';
+
+                    area.dispatchEvent(
+                        new Event('input', { bubbles: true })
+                    );
+
+                    area.dispatchEvent(
+                        new Event('change', { bubbles: true })
+                    );
+                    """,
+                    html_area,
+                )
+
+                html_button.click()
+
+                editor = wait.until(
+                    EC.visibility_of_element_located(
+                        (By.CSS_SELECTOR, ".note-editable"),
+                    )
+                )
+
+                # HTML 모드에서 빠져나온 후
+                # 다음 입력 위치를 확실하게 맨 끝으로 이동
+                editor.click()
+                editor.send_keys(Keys.CONTROL, Keys.END)
+
+            # URL 뒤에는 Enter를 보내지 않음
+            continue
+
+        print(
+            f"[시간] 본문입력 : "
+            f"{time.perf_counter() - t:.2f}초",
+            flush=True,
+        )
+        t = time.perf_counter()
+
+        # ============================================
+        # 저장 전 HTML 확인
+        # ============================================
+        html_button.click()
+
+        html_area = wait.until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, ".note-codable"),
+            )
+        )
+
+        print(
+            "===== 저장 직전 HTML =====",
+            flush=True,
+        )
+
+        print(
+            html_area.get_attribute("value"),
+            flush=True,
+        )
+
+        # 저장 전 일반 에디터 모드로 복귀
+        html_button.click()
+
+        wait.until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, ".note-editable"),
+            )
+        )
+
+        # ============================================
+        # 수정 버튼 클릭
+        # ============================================
+        write_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button.btn_blue.write"),
+            )
+        )
+
+        before_url = driver.current_url
+        print(f"[클릭 전 URL] {before_url}", flush=True)
+
+        write_button.click()
+
+        # ============================================
+        # 저장 버튼 클릭 직후 상태 확인
+        # ============================================
+
+        # --------------------------------------------
+        # 1) 브라우저 네이티브 alert(경고창) 발생 여부 확인
+        # --------------------------------------------
+        try:
+            alert = WebDriverWait(driver, 3).until(
+                EC.alert_is_present()
+            )
+            alert_text = alert.text
+            print(f"[경고창 감지] {alert_text}", flush=True)
+            alert.accept()
+
+        except Exception:
+            print("[경고창 없음]", flush=True)
+
+        # --------------------------------------------
+        # 2) URL 변경 여부 확인 (저장 성공 시 상세 페이지로 이동)
+        # --------------------------------------------
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.url_changes(before_url)
+            )
+
+            print(
+                f"[클릭 후 URL 변경됨] {driver.current_url}",
+                flush=True,
+            )
+
+        except Exception:
+            print(
+                f"[URL 변경 없음] 현재 URL: {driver.current_url}",
+                flush=True,
+            )
+
+            # --------------------------------------------
+            # 3) URL이 안 바뀐 경우, 페이지 내 에러 메시지 확인
+            #    (실제 마크업에 맞게 선택자 조정 필요)
+            # --------------------------------------------
+            error_elements = driver.find_elements(
+                By.CSS_SELECTOR,
+                ".error_msg, .alert_msg, .layer_error",
+            )
+
+            if error_elements:
+                for el in error_elements:
+                    print(f"[에러 메시지 감지] {el.text}", flush=True)
+            else:
+                print("[에러 메시지 요소 없음]", flush=True)
+
+        # --------------------------------------------
+        # 4) 최종 상태 로그
+        # --------------------------------------------
+        print(f"[최종 페이지 제목] {driver.title}", flush=True)
+        print(f"[최종 URL] {driver.current_url}", flush=True)
+
+        print(
+            f"[시간] 저장 : "
+            f"{time.perf_counter() - t:.2f}초",
+            flush=True,
+        )
+
+        return {
+            "success": True,
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+
+        return {
+            "success": False,
+            "message": str(e),
+        }
+
+    finally:
+        elapsed = time.perf_counter() - start
+
+        print(
+            f"[게시글 수정] 실행시간: "
+            f"{elapsed:.2f}초",
+            flush=True,
+        )
+
+
+
+
+__________________________________________________________
+
+
+import json
+import os
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import gspread
+from google.oauth2.service_account import Credentials
+
+from login_modify_multiple import create_driver, login, modify_post
+
+
+# -------------------------------------------------
+# Google Sheets 인증
+# -------------------------------------------------
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets"
+]
+
+credentials = Credentials.from_service_account_info(
+    json.loads(os.environ["GOOGLE_CREDENTIALS"]),
+    scopes=SCOPES,
+)
+
+gc = gspread.authorize(credentials)
+
+spreadsheet = gc.open_by_key(
+    "13Hp2IqBFzHE5L4xqGpieu-GVu0mA79fV06xYuFfnSB0"
+)
+
+worksheet = spreadsheet.worksheet(
+    os.environ["TARGET_SHEET"]
+)
+
+
+# -------------------------------------------------
+# GitHub Secrets
+# -------------------------------------------------
+
+user_id = os.environ["CAT_ID"]
+user_pw = os.environ["CAT_PW"]
+
+
+# -------------------------------------------------
+# URL 변환
+# -------------------------------------------------
+
+def to_modify_url(url):
+    url = str(url or "").strip()
+
+    # 모바일 게시글 URL
+    # https://m.dcinside.com/board/catfiesta/58
+    match = re.fullmatch(
+        r"https://m\.dcinside\.com/board/([^/]+)/(\d+)",
+        url,
+    )
+
+    if match:
+        gallery_id = match.group(1)
+        post_no = match.group(2)
+
+        return (
+            "https://gall.dcinside.com/mgallery/board/modify/"
+            f"?id={gallery_id}&no={post_no}"
+        )
+
+    # 이미 PC 수정 URL인 경우 등은 그대로 사용
+    return url
+
+
+# -------------------------------------------------
+# B/H열에서 작업 대상 찾기
+#
+# 구조: H{그룹시작행}=모음집 링크 / H{그룹시작행+1}=게시할 내용 / H{그룹시작행+2}=완료 날짜
+# - B열에 값이 있는 행 = 그룹 시작 행
+# - H(그룹시작행)에 링크가 없으면 대상 아님
+# - H(그룹시작행+2)에 값(완료 날짜)이 있으면 이미 처리된 것으로 보고 건너뜀
+# - gumsa(링크 일치 검증) 로직은 폐기 — 완료 날짜 유무만으로 판단
+# -------------------------------------------------
+
+START_ROW = 5
+NAME_COL = 2  # B열
+H_COL = 8     # H열
+
+b_values = worksheet.col_values(NAME_COL)
+h_values = worksheet.col_values(H_COL)
+
+# 길이 보정
+last_row = max(len(b_values), len(h_values), START_ROW)
+while len(b_values) < last_row:
+    b_values.append("")
+while len(h_values) < last_row:
+    h_values.append("")
+
+tasks = []
+
+for idx in range(START_ROW - 1, last_row):
+    name = str(b_values[idx]).strip() if idx < len(b_values) else ""
+
+    if not name:
+        continue  # 그룹 시작 행이 아니면 건너뜀
+
+    group_start_row = idx + 1  # 1-indexed 실제 시트 행 번호
+
+    link = str(h_values[idx]).strip() if idx < len(h_values) else ""
+    if not link:
+        continue  # 모음집 링크가 없는 그룹은 대상 아님
+
+    content_idx = idx + 1
+    date_idx = idx + 2
+
+    date_value = (
+        str(h_values[date_idx]).strip()
+        if date_idx < len(h_values)
+        else ""
+    )
+
+    if date_value:
+        continue  # 완료 날짜가 있으면 이미 처리된 것으로 간주, 건너뜀
+
+    content_value = (
+        str(h_values[content_idx]).strip()
+        if content_idx < len(h_values)
+        else ""
+    )
+
+    if not content_value:
+        # 게시할 내용이 비어있음 = C열 링크가 3개 미만이라
+        # GAS(buildCollectionPostContent)가 빈 문자열을 써둔 경우.
+        # 빈 내용으로 게시글을 덮어쓰지 않도록 대상에서 제외.
+        print(
+            f"{name} (H{group_start_row}): 게시할 내용이 비어있어 건너뜁니다 "
+            f"(C열 링크 3개 미만으로 추정).",
+            flush=True,
+        )
+        continue
+
+    modify_url = to_modify_url(link)
+
+    if not modify_url:
+        print(
+            f"{name} (H{group_start_row}): 모음집 링크 변환 실패, 건너뜁니다.",
+            flush=True,
+        )
+        continue
+
+    tasks.append(
+        {
+            "name": name,
+            "date_row": date_idx + 1,  # 완료 날짜를 기록할 실제 시트 행 번호
+            "modify_url": modify_url,
+            "text": content_value.replace("§", "\n\n"),
+        }
+    )
+
+
+# -------------------------------------------------
+# 작업할 항목이 없으면 종료
+# -------------------------------------------------
+
+if not tasks:
+    print("처리할 '모음집관리' 작업이 없습니다.", flush=True)
+    raise SystemExit(0)
+
+print(f"처리할 작업 수: {len(tasks)}개", flush=True)
+
+
+# -------------------------------------------------
+# Chrome 실행 및 로그인: 전체 작업에서 1회
+# -------------------------------------------------
+
+driver = None
+
+try:
+    driver = create_driver()
+    login(driver, user_id, user_pw)
+
+    # -------------------------------------------------
+    # 게시글 순차 수정
+    # -------------------------------------------------
+
+    for task in tasks:
+        name = task["name"]
+        date_row = task["date_row"]
+        modify_url = task["modify_url"]
+        text = task["text"]
+
+        print(
+            f"===== {name} (H{date_row}) 작업 시작 =====",
+            flush=True,
+        )
+        print(f"수정 URL: {modify_url}", flush=True)
+
+        # 작업 시작 상태 - 완료 날짜 셀에 임시로 "실행중" 기록
+        worksheet.update(
+            range_name=f"H{date_row}",
+            values=[["실행중"]],
+        )
+
+        print(f"{name}: 실행중", flush=True)
+
+        result = modify_post(
+            driver,
+            modify_url,
+            text,
+        )
+
+        # 성공한 경우: 완료 날짜 셀에 실제 완료 시각 기록
+        if result.get("success", False):
+
+            completed_at = datetime.now(
+                ZoneInfo("Asia/Seoul")
+            ).strftime("%m/%d %H:%M:%S")
+
+            worksheet.update(
+                range_name=f"H{date_row}",
+                values=[[completed_at]],
+            )
+
+            print(
+                f"{name}: 완료 / {completed_at}",
+                flush=True,
+            )
+
+        # 실패한 경우: 완료 날짜 셀을 다시 비워서 다음 실행 때 재시도 대상이 되게 함
+        else:
+            message = result.get(
+                "message",
+                "알 수 없는 오류",
+            )
+
+            worksheet.update(
+                range_name=f"H{date_row}",
+                values=[[""]],
+            )
+
+            print(
+                f"{name}: 실패. 완료 날짜를 비워 다음 실행 시 재시도되게 합니다. "
+                f"{message}",
+                flush=True,
+            )
+
+finally:
+    if driver:
+        driver.quit()
+        print("Chrome 종료", flush=True)
+
+__________________________________________________________
+
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+import time
+import traceback
+
+
+LOGIN_URL = (
+    "https://sign.dcinside.com/login"
+    "?s_url=https://www.dcinside.com/"
+)
+
+
+def modify_post(
+    user_id,
+    user_pw,
+    modify_url,
+    html
+):
+    print("★★★★★ modify_post 시작 ★★★★★", flush=True)
+    start = time.perf_counter()
+
+    t = time.perf_counter()
+
+    options = Options()
+
+    options.binary_location = "/usr/bin/google-chrome"
+
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+
+    # Chrome 최적화
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-sync")
+    options.add_argument("--metrics-recording-only")
+    options.add_argument("--disable-default-apps")
+
+    # 이미지 로딩 차단
+    options.add_experimental_option(
+        "prefs",
+        {
+            "profile.managed_default_content_settings.images": 2
+        }
+    )
+
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/150.0.0.0 Safari/537.36"
+    )
+
+    driver = webdriver.Chrome(options=options)
+
+    wait = WebDriverWait(driver, 5)
+
+    try:
+
+        # ============================================
+        # 로그인
+        # ============================================
+
+        driver.get(LOGIN_URL)
+
+        id_input = wait.until(
+            EC.visibility_of_element_located(
+                (By.NAME, "user_id")
+            )
+        )
+
+        id_input.clear()
+        id_input.send_keys(user_id)
+
+        pw_input = wait.until(
+            EC.visibility_of_element_located(
+                (By.NAME, "pw")
+            )
+        )
+
+        pw_input.clear()
+        pw_input.send_keys(user_pw)
+
+        login_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button[type='submit']")
+            )
+        )
+
+        login_button.click()
+
+        wait.until(
+            EC.url_changes(LOGIN_URL)
+        )
+
+        print(
+            f"[시간] 로그인 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        t = time.perf_counter()
+
+        # ============================================
+        # 수정 페이지 이동
+        # ============================================
+
+        driver.get(modify_url)
+
+        # ============================================
+        # HTML 모드
+        # ============================================
+
+        html_button = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    "//button[normalize-space()='HTML']"
+                )
+            )
+        )
+
+        print(
+            f"[시간] 수정페이지 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        t = time.perf_counter()
+
+        html_button.click()
+
+        # ============================================
+        # 본문 교체
+        # ============================================
+
+        html_area = wait.until(
+            EC.visibility_of_element_located(
+                (
+                    By.CSS_SELECTOR,
+                    ".note-codable"
+                )
+            )
+        )
+
+        # HTML 크기 출력
+        html_size_kb = len(html.encode("utf-8")) / 1024
+
+        print(
+            f"[HTML] 길이 : {len(html):,}자 / "
+            f"UTF-8 크기 : {html_size_kb:,.1f} KB",
+            flush=True
+        )
+
+        # ============================================
+        # send_keys() 대신 JavaScript로 직접 주입
+        # ============================================
+
+        driver.execute_script(
+            """
+            arguments[0].value = arguments[1];
+
+            arguments[0].dispatchEvent(
+                new Event('input', { bubbles: true })
+            );
+
+            arguments[0].dispatchEvent(
+                new Event('change', { bubbles: true })
+            );
+            """,
+            html_area,
+            html
+        )
+
+        # ============================================
+        # 실제 입력 결과 확인
+        # ============================================
+
+        actual_length = driver.execute_script(
+            "return arguments[0].value.length;",
+            html_area
+        )
+
+        print(
+            f"[HTML] 원본={len(html):,}자 / "
+            f"입력={actual_length:,}자",
+            flush=True
+        )
+
+        if actual_length != len(html):
+            raise RuntimeError(
+                f"HTML 입력 불일치: "
+                f"원본 {len(html):,}자 / "
+                f"입력 {actual_length:,}자"
+            )
+
+        print(
+            f"[시간] 본문입력 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        t = time.perf_counter()
+
+        # ============================================
+        # 수정 버튼
+        # ============================================
+
+        write_button = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    "button.btn_blue.write"
+                )
+            )
+        )
+
+        write_button.click()
+
+        print(
+            f"[시간] 저장 : {time.perf_counter()-t:.2f}초",
+            flush=True
+        )
+
+        return {
+            "success": True
+        }
+
+    except Exception as e:
+
+        traceback.print_exc()
+
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+    finally:
+
+        elapsed = time.perf_counter() - start
+
+        print(
+            f"[modify_post] 실행시간: {elapsed:.2f}초",
+            flush=True
+        )
+
+        driver.quit()
+
+
+__________________________________________________________
+
+
+import os
+import json
+import re
+
+import gspread
+from google.oauth2.service_account import Credentials
+
+from login_modify_normal import modify_post
+
+
+# -------------------------------------------------
+# Google Sheets 인증
+# -------------------------------------------------
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets"
+]
+
+credentials = Credentials.from_service_account_info(
+    json.loads(os.environ["GOOGLE_CREDENTIALS"]),
+    scopes=SCOPES
+)
+
+gc = gspread.authorize(credentials)
+
+spreadsheet = gc.open_by_key(
+    "13Hp2IqBFzHE5L4xqGpieu-GVu0mA79fV06xYuFfnSB0"
+)
+
+worksheet = spreadsheet.worksheet(
+    os.environ["TARGET_SHEET"]
+)
+
+
+# -------------------------------------------------
+# GitHub Secrets
+# -------------------------------------------------
+
+user_id = os.environ["CAT_ID"]
+user_pw = os.environ["CAT_PW"]
+
+
+# -------------------------------------------------
+# 시트 데이터 읽기
+# -------------------------------------------------
+
+modify_url = worksheet.acell("M4").value
+
+if modify_url:
+    modify_url = modify_url.strip()
+
+    # 모바일 게시글 URL을 PC 수정 URL로 변환
+    match = re.fullmatch(
+        r"https://m\.dcinside\.com/board/([^/]+)/(\d+)",
+        modify_url
+    )
+
+    if match:
+        gallery_id = match.group(1)
+        post_no = match.group(2)
+
+        modify_url = (
+            "https://gall.dcinside.com/mgallery/board/modify/"
+            f"?id={gallery_id}&no={post_no}"
+        )
+else:
+    modify_url = ""
+
+# M5 셀에는 완성된 HTML이 그대로 들어있다.
+html = worksheet.acell("M5").value or ""
+
+
+# URL이 없으면 종료
+if not modify_url:
+    print("수정 URL이 없습니다.")
+    exit()
+
+
+# -------------------------------------------------
+# 게시글 수정
+# -------------------------------------------------
+
+result = modify_post(
+    user_id,
+    user_pw,
+    modify_url,
+    html
+)
+
+
+# -------------------------------------------------
+# 결과 기록
+# -------------------------------------------------
+
+if result["success"]:
+
+    worksheet.update(
+        range_name="M7",
+        values=[["완료"]]
+    )
+
+    print("완료")
+
+else:
+
+    message = result.get("message", "알 수 없는 오류")
+
+    worksheet.update(
+        range_name="M7",
+        values=[[f"실패 : {message}"]]
+    )
+
+    print(f"실패 : {message}")
+
+__________________________________________________________
+
+import requests
+import re
+import html as html_module
+import time
+
+
+def extract_nickdate(url):
+
+    total_start = time.time()
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    try:
+
+        # -------------------------
+        # HTTP 요청
+        # -------------------------
+
+        request_start = time.time()
+
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=30
+        )
+
+        request_time = time.time() - request_start
+
+        html = response.text
+
+        print(
+            f"[응답] 상태={response.status_code}, "
+            f"바이트={len(response.content)}, "
+            f"URL={url}",
+            flush=True
+        )
+
+        print(
+            f"[시간] HTTP 요청 : {request_time:.4f}초",
+            flush=True
+        )
+
+        # 삭제된 글 판정
+        deleted = response.status_code == 404
+
+        if deleted:
+            return {
+                "date": "삭제됨",
+                "author": "",
+                "deleted": True
+            }
+
+        date = ""
+        author = ""
+
+        # -------------------------
+        # gallview_head 영역 추출
+        # -------------------------
+
+        head_start_time = time.time()
+
+        head_part = html
+
+        head_start = html.find(
+            '<div class="gallview_head"'
+        )
+
+        if head_start != -1:
+
+            head_end = html.find(
+                '<div class="gallview_contents"',
+                head_start
+            )
+
+            if head_end != -1:
+                head_part = html[
+                    head_start:head_end
+                ]
+            else:
+                head_part = html[
+                    head_start:
+                ]
+
+        head_time = time.time() - head_start_time
+
+        print(
+            f"[시간] 헤더 추출 : {head_time:.6f}초",
+            flush=True
+        )
+
+        # -------------------------
+        # 작성자 추출
+        # -------------------------
+
+        author_start_time = time.time()
+
+        author_match = re.search(
+            r'data-nick="([^"]+)"'
+            r'(?:\s+data-uid="([^"]*)")?'
+            r'(?:\s+data-ip="([^"]*)")?',
+            head_part
+        )
+
+        if author_match:
+
+            nick = html_module.unescape(
+                author_match.group(1)
+            )
+
+            uid = (
+                author_match.group(2)
+                if author_match.group(2)
+                else (author_match.group(3) or "")
+            )
+
+            if uid:
+                author = f"{nick}({uid})"
+            else:
+                author = nick
+
+        author_time = time.time() - author_start_time
+
+        print(
+            f"[시간] 작성자 추출 : {author_time:.6f}초",
+            flush=True
+        )
+
+        # -------------------------
+        # 날짜 추출
+        # -------------------------
+
+        date_start_time = time.time()
+
+        date_match = (
+            re.search(
+                r'<span class="gall_date" title="([^"]+)">',
+                head_part
+            )
+            or
+            re.search(
+                r'<span class="date">([^<]+)</span>',
+                head_part
+            )
+        )
+
+        if date_match:
+
+            raw_date = (
+                date_match.group(1)
+                .strip()
+                .split(" ")[0]
+            )
+
+            date = re.sub(
+                r"\.([^ ])",
+                r". \1",
+                raw_date.replace("-", ". ")
+            )
+
+        date_time = time.time() - date_start_time
+
+        print(
+            f"[시간] 날짜 추출 : {date_time:.6f}초",
+            flush=True
+        )
+
+        total_time = time.time() - total_start
+
+        print(
+            f"[결과] 날짜={date}, "
+            f"작성자={author}",
+            flush=True
+        )
+
+        print(
+            f"[시간] 총 소요 : {total_time:.4f}초",
+            flush=True
+        )
+
+        # HTML은 받았지만 날짜 또는 작성자 추출 실패
+        if not date or not author:
+            return {
+                "date": "",
+                "author": "",
+                "deleted": False
+            }
+
+        return {
+            "date": date,
+            "author": author,
+            "deleted": False
+        }
+
+    except Exception as e:
+
+        print(
+            f"[오류] URL={url}, 오류={e}",
+            flush=True
+        )
+
+        return {
+            "date": "",
+            "author": "",
+            "deleted": False
+        }
+
+__________________________________________________________
+
+
+import os
+import json
+import time
+
+import gspread
+from google.oauth2.service_account import Credentials
+from nickdate_test import extract_nickdate
+from concurrent.futures import ThreadPoolExecutor
+
+# 프로그램 시작 시간
+program_start = time.time()
+
+# Google Sheets API 권한
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets"
+]
+
+# GitHub Secret에 저장한 서비스 계정 정보로 인증
+credentials = Credentials.from_service_account_info(
+    json.loads(os.environ["GOOGLE_CREDENTIALS"]),
+    scopes=SCOPES
+)
+
+gc = gspread.authorize(credentials)
+
+# 작업할 스프레드시트 열기
+spreadsheet = gc.open_by_key(
+    "13Hp2IqBFzHE5L4xqGpieu-GVu0mA79fV06xYuFfnSB0"
+)
+
+worksheet = spreadsheet.worksheet(
+    os.environ["TARGET_SHEET"]
+)
+
+# 실제 데이터가 시작되는 행
+start_row = 5
+
+# C열(URL), F열(날짜), G열(작성자) 읽기
+# [새 구조] 날짜 E열 -> F열, 작성자 F열 -> G열로 이동
+urls = worksheet.col_values(3)
+dates = worksheet.col_values(6)
+authors = worksheet.col_values(7)
+
+# F/G열 길이가 부족하면 빈 문자열로 맞춰줌
+while len(dates) < len(urls):
+    dates.append("")
+
+while len(authors) < len(urls):
+    authors.append("")
+
+# 크롤링 대상 URL과 행 번호 저장
+requests = []
+target_rows = []
+
+# 크롤링 대상 찾기
+for row in range(start_row, len(urls) + 1):
+
+    url = urls[row - 1].strip()
+
+    date = dates[row - 1] if row - 1 < len(dates) else ""
+    author = authors[row - 1] if row - 1 < len(authors) else ""
+
+    # URL이 없으면 건너뜀
+    if not url:
+        continue
+
+    # 디시인사이드 URL만 처리
+    if "dcinside" not in url:
+        continue
+
+    # 날짜나 작성자가 비어있는 경우
+    is_clear = (date == "") or (author == "")
+
+    # 이전 실행에서 retry로 남은 경우
+    is_retry = (date == "retry")
+
+    # 크롤링 대상 추가
+    if is_clear or is_retry:
+        requests.append(url)
+        target_rows.append(row)
+
+print("크롤링 대상 개수 :", len(requests))
+
+for row, url in zip(target_rows, requests):
+    print(row, url)
+
+# ---------------------------------------------
+# 최대 3회까지 실패한 URL만 재시도
+# ---------------------------------------------
+
+MAX_RETRIES = 3
+current_try = 0
+
+# 처음에는 전체 대상이 재시도 목록
+pending_requests = requests[:]
+pending_rows = target_rows[:]
+
+while pending_requests and current_try < MAX_RETRIES:
+
+    print(f"\n===== {current_try + 1}차 시도 =====")
+
+    batch_start = time.time()
+
+    # 병렬 크롤링
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        results = list(executor.map(extract_nickdate, pending_requests))
+
+    batch_time = time.time() - batch_start
+
+    print(
+        f"[전체] {len(pending_requests)}개 URL 병렬 처리 완료 : "
+        f"{batch_time:.2f}초",
+        flush=True
+    )
+
+    # 다음 재시도 대상
+    next_pending_requests = []
+    next_pending_rows = []
+
+    # 결과 처리
+    for row, url, result in zip(pending_rows, pending_requests, results):
+
+        # 삭제된 게시물
+        if result["deleted"]:
+            dates[row - 1] = "삭제됨"
+            authors[row - 1] = ""
+            continue
+
+        # 정상 크롤링 성공
+        if result["date"] and result["author"]:
+            dates[row - 1] = result["date"]
+            authors[row - 1] = result["author"]
+            continue
+
+        # 실패 → 다음 재시도 목록으로 이동
+        print(f"재시도 대상 : {url}")
+
+        next_pending_requests.append(url)
+        next_pending_rows.append(row)
+
+    # 다음 반복에서 실패한 URL만 다시 시도
+    pending_requests = next_pending_requests
+    pending_rows = next_pending_rows
+
+    current_try += 1
+
+# ---------------------------------------------
+# 3번 시도 후에도 실패하면 retry 기록
+# ---------------------------------------------
+
+for row in pending_rows:
+    dates[row - 1] = "retry"
+    authors[row - 1] = ""
+
+# ---------------------------------------------
+# 결과를 Google Sheets에 저장
+# ---------------------------------------------
+
+sheet_start = time.time()
+
+date_values = [[d] for d in dates[start_row - 1:]]
+author_values = [[a] for a in authors[start_row - 1:]]
+
+# [새 구조] 날짜 -> F열, 작성자 -> G열
+worksheet.update(
+    range_name=f"F{start_row}:F{start_row + len(date_values) - 1}",
+    values=date_values
+)
+
+worksheet.update(
+    range_name=f"G{start_row}:G{start_row + len(author_values) - 1}",
+    values=author_values
+)
+
+sheet_time = time.time() - sheet_start
+
+print(
+    f"[전체] Google Sheets 저장 : {sheet_time:.2f}초",
+    flush=True
+)
+
+print(
+    f"[전체] 프로그램 실행 : {time.time() - program_start:.2f}초",
+    flush=True
+)
+
+print("완료")
+
+__________________________________________________________
+__________________________________________________________
+__________________________________________________________
+__________________________________________________________
+__________________________________________________________
+__________________________________________________________
+__________________________________________________________
+__________________________________________________________
+
+
+
+
+
+
+
+
+
+
+
+
+

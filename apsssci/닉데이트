@@ -1,0 +1,29 @@
+// First commit: 2026-08-12
+// Last commit: 2026-08-12
+function triggerCrawler(sheetName) {
+  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_PAT");
+
+  const url =
+    "https://api.github.com/repos/codec23567/catfiestagitsheet235/actions/workflows/nickdate.yml/dispatches";
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json"
+    },
+    payload: JSON.stringify({
+      ref: "main",
+      inputs: {
+        sheet_name: sheetName
+      }
+    }),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+
+  Logger.log(response.getResponseCode());
+  Logger.log(response.getContentText());
+}

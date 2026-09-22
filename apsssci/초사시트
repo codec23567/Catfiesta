@@ -1,0 +1,125 @@
+# First commit: 2026-08-12
+# Last commit: 2026-08-12
+=LET(
+  sheet_keys, {"다군"; "바사"; "갤걸"; "드엠"; "울소"; "닼히"; "갓즈"; "아워즈"; "픽시즈"; "루가족"; "걸몬"; "바스/인축"},
+  sheet_fullnames, {"<다이너마이트군단>"; "<초환수바사라즈>"; "<갤럭시걸즈>"; "<드래곤엠페러스>"; "<울트라소울즈>"; "<다크히어로즈>"; "<기간트제우스>"; "<아이언워즈>"; "<엘레멘탈픽시즈>"; "<고양이루가족>"; "<걸즈몬스터즈>"; "<바스터즈/인축>"},
+  c3_links, {'다군'!C3; '바사'!C3; '갤걸'!C3; '드엠'!C3; '울소'!C3; '닼히'!C3; '갓즈'!C3; '아워즈'!C3; '픽시즈'!C3; '루가족'!C3; '걸몬'!C3; '바스/인축'!C3},
+  
+  full_data, {
+    INDEX(IFERROR(MAP('다군'!B1:B503, LAMBDA(x, "다군"))),), '다군'!B1:J503;
+    INDEX(IFERROR(MAP('바사'!B1:B501, LAMBDA(x, "바사"))),), '바사'!B1:J501;
+    INDEX(IFERROR(MAP('갤걸'!B1:B499, LAMBDA(x, "갤걸"))),), '갤걸'!B1:J499;
+    INDEX(IFERROR(MAP('드엠'!B1:B500, LAMBDA(x, "드엠"))),), '드엠'!B1:J500;
+    INDEX(IFERROR(MAP('울소'!B1:B500, LAMBDA(x, "울소"))),), '울소'!B1:J500; 
+    INDEX(IFERROR(MAP('닼히'!B1:B502, LAMBDA(x, "닼히"))),), '닼히'!B1:J502; 
+    INDEX(IFERROR(MAP('갓즈'!B1:B500, LAMBDA(x, "갓즈"))),), '갓즈'!B1:J500; 
+    INDEX(IFERROR(MAP('아워즈'!B1:B500, LAMBDA(x, "아워즈"))),), '아워즈'!B1:J500; 
+    INDEX(IFERROR(MAP('픽시즈'!B1:B500, LAMBDA(x, "픽시즈"))),), '픽시즈'!B1:J500; 
+    INDEX(IFERROR(MAP('루가족'!B1:B500, LAMBDA(x, "루가족"))),), '루가족'!B1:J500; 
+    INDEX(IFERROR(MAP('걸몬'!B1:B501, LAMBDA(x, "걸몬"))),), '걸몬'!B1:J501; 
+    INDEX(IFERROR(MAP('바스/인축'!B1:B504, LAMBDA(x, "바스/인축"))),), '바스/인축'!B1:J504
+  },
+  sheet_names, INDEX(full_data,,1),
+  raw_names, INDEX(full_data,,2),
+  raw_coll, INDEX(full_data,,7),
+  raw_images, INDEX(full_data,,10), 
+  
+  filled_names, SCAN("", raw_names, LAMBDA(a, b, IF(b="", a, b))),
+  filled_coll, SCAN("", SEQUENCE(ROWS(full_data)), LAMBDA(a, i, 
+    IF(INDEX(raw_names, i) <> "", INDEX(raw_coll, i), IF(INDEX(raw_coll, i) <> "", INDEX(raw_coll, i), a))
+  )),
+  filled_images, SCAN("", SEQUENCE(ROWS(full_data)), LAMBDA(a, i, 
+    IF(INDEX(raw_names, i) <> "", INDEX(raw_images, i), IF(INDEX(raw_images, i) <> "", INDEX(raw_images, i), a))
+  )),
+  links, INDEX(full_data,,3),
+  types, INDEX(full_data,,4),
+  
+  filtered_list, FILTER(
+    {sheet_names, filled_names, links, types, filled_coll, filled_images}, 
+    (types="초본") + (types="4진")
+  ),
+  
+  f_sheets, INDEX(filtered_list,,1),
+  f_names, INDEX(filtered_list,,2),
+  f_links, INDEX(filtered_list,,3),
+  f_types, INDEX(filtered_list,,4),
+  f_coll, INDEX(filtered_list,,5),
+  f_images, INDEX(filtered_list,,6), 
+  
+  {
+    MAP(SEQUENCE(ROWS(f_sheets)), LAMBDA(i, IF(i=1, INDEX(f_sheets, i), IF(INDEX(f_sheets, i) = INDEX(f_sheets, i-1), "", INDEX(f_sheets, i))))),
+    MAP(SEQUENCE(ROWS(f_names)), LAMBDA(i, IF(i=1, INDEX(f_names, i), IF(INDEX(f_names, i) = INDEX(f_names, i-1), "", INDEX(f_names, i))))), 
+    f_links, 
+    f_types, 
+    
+    MAP(SEQUENCE(ROWS(f_names)), LAMBDA(i, 
+      LET(
+        currName, INDEX(f_names, i),
+        totalRawLinks, COUNTIFS(filled_names, currName, links, "<>"),
+        IF(totalRawLinks <= 2, "",
+          IF(INDEX(f_links, i) = "", "", 
+            IF(i=1, INDEX(f_coll, i), IF(INDEX(f_names, i) = INDEX(f_names, i-1), "", INDEX(f_coll, i)))
+          )
+        )
+      )
+    )),
+    
+    MAP(SEQUENCE(ROWS(f_sheets)), LAMBDA(i, 
+      IF(OR(i=1, INDEX(f_sheets, i) <> INDEX(f_sheets, i-1)), 
+        LET(
+          curr_sheet, INDEX(f_sheets, i),
+          idx, MATCH(curr_sheet, sheet_keys, 0),
+          link, INDEX(c3_links, idx),
+          fname, INDEX(sheet_fullnames, idx),
+          "<br><span style=""font-size: 28px;""><a href=""" & link & """><b>" & fname & "</b></a></span><div style=""font-size:28px;""><br></div>"
+        ),
+        "" 
+      )
+    )),
+    
+    MAP(SEQUENCE(ROWS(f_names)), LAMBDA(i, 
+      IF(INDEX(f_links, i) = "", "", 
+        IF(i=1, INDEX(f_images, i), IF(INDEX(f_names, i) = INDEX(f_names, i-1), "", INDEX(f_images, i))))
+    ))
+  }
+)
+
+
+
+
+
+
+
+압축본
+
+
+=TEXTJOIN("", TRUE, F5:H)
+
+
+메모용초사
+
+
+=QUERY(
+  REDUCE({"",""}, FILTER(ROW(B5:B150), (B5:B150<>"")*(D5:D150<>"")), 
+    LAMBDA(acc, r, 
+      LET(
+        a_raw, INDIRECT("A"&r),
+        a_val, "<" & a_raw & ">",
+        b_val, INDIRECT("B"&r),
+        d_raw, INDIRECT("D"&r),
+        d_val, IF(d_raw="초본", "", "(" & d_raw & ")"),
+        
+        IF(a_raw <> "", 
+          IF(ROWS(acc) = 1, 
+            VSTACK(acc, {a_val, ""}, {b_val, d_val}), 
+            VSTACK(acc, {"", ""}, {a_val, ""}, {b_val, d_val})
+          ), 
+          VSTACK(acc, {b_val, d_val})
+        )
+      )
+    )
+  ), 
+  "offset 1"
+)
+
+
